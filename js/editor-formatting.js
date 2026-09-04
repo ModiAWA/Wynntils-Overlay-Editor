@@ -24,7 +24,7 @@
       state.strike = false;
       state.obfuscated = false;
     };
-    for (let index = 0; index < limit; ) {
+    for (let index = 0; index < limit;) {
       const prefix = source[index];
       if (prefix !== '&' && prefix !== '§') {
         index += 1;
