@@ -170,7 +170,7 @@
       lines[lines.length - 1].push({ char: character, style: copyStyle(style) });
     }
 
-    for (let index = 0; index < input.length; ) {
+    for (let index = 0; index < input.length;) {
       if (input[index] === '\n' || (input[index] === '\\' && input[index + 1] === 'n')) {
         lines.push([]);
         index += input[index] === '\n' ? 1 : 2;

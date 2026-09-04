@@ -38,7 +38,7 @@
   function segmentWynntilsGlyphs(value) {
     const source = String(value == null ? '' : value);
     const segments = [];
-    for (let index = 0; index < source.length; ) {
+    for (let index = 0; index < source.length;) {
       const sequence = TITLE_CONTROL_SEQUENCES.find((entry) =>
         source.startsWith(entry.value, index),
       );

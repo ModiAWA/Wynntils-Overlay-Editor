@@ -46,14 +46,14 @@
   function isValid(payload) {
     return Boolean(
       payload &&
-        payload.schemaVersion === VERSION &&
-        isValidTimestamp(payload.updatedAt) &&
-        FIELDS.some((field) => Object.prototype.hasOwnProperty.call(payload, field)) &&
-        FIELDS.every(
-          (field) =>
-            !Object.prototype.hasOwnProperty.call(payload, field) ||
-            FIELD_VALIDATORS[field](payload[field]),
-        ),
+      payload.schemaVersion === VERSION &&
+      isValidTimestamp(payload.updatedAt) &&
+      FIELDS.some((field) => Object.prototype.hasOwnProperty.call(payload, field)) &&
+      FIELDS.every(
+        (field) =>
+          !Object.prototype.hasOwnProperty.call(payload, field) ||
+          FIELD_VALIDATORS[field](payload[field]),
+      ),
     );
   }
 
