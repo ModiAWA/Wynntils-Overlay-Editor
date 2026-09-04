@@ -1,0 +1,87 @@
+name: Sync Wynntils functions
+
+on:
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Optional Wynntils release tag or commit
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-wynntils-functions
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Refresh official function snapshot
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      WYNNTILS_REF: ${{ inputs.ref || '' }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Generate from Wynntils official sources
+        run: node scripts/sync-functions.mjs
+
+      - name: Verify generated editor data
+        run: |
+          node --check js/functions.generated.js
+          node --check js/functions.zh.js
+          node --test tests/editor.test.js
+          git diff --check
+
+      - name: Detect changes
+        id: changes
+        shell: bash
+        run: |
+          if git diff --quiet -- js/functions.generated.js index.html; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open or update pull request
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          branch="automation/wynntils-functions"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$branch"
+          git add js/functions.generated.js index.html
+          git commit -m "chore(data): sync official Wynntils functions"
+          remote_sha="$(git ls-remote --heads origin "$branch" | cut -f1)"
+          if [ -n "$remote_sha" ]; then
+            git push --force-with-lease="refs/heads/$branch:$remote_sha" origin "HEAD:$branch"
+          else
+            git push --set-upstream origin "HEAD:$branch"
+          fi
+
+          existing_pr="$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')"
+          if [ -z "$existing_pr" ]; then
+            gh pr create \
+              --base "${{ github.event.repository.default_branch }}" \
+              --head "$branch" \
+              --title "chore(data): sync official Wynntils functions" \
+              --body "Refreshes the offline function snapshot directly from the latest stable Wynntils release. Generated data and editor tests passed before this PR was opened."
+          fi

@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Wynntils Overlay Studio</title>
+    <link rel="stylesheet" href="styles.css?v=21" />
+  </head>
+  <body>
+    <div class="page-tools">
+      <button class="language-button" id="languageButton" type="button" data-i18n="languageLabel">
+        EN
+      </button>
+    </div>
+
+    <div id="startupError" class="startup-error" role="alert" hidden></div>
+
+    <main id="workspace" class="workspace">
+      <h1 id="pageTitle" class="sr-only" data-i18n="pageTitle">Wynntils Overlay Studio</h1>
+      <div class="editor-grid">
+        <section class="panel preview-panel" aria-labelledby="previewTitle">
+          <div class="section-heading">
+            <h2 id="previewTitle" data-i18n="previewTitle">游戏内效果参考</h2>
+            <button
+              type="button"
+              id="togglePreviewButton"
+              class="preview-collapse-button"
+              aria-controls="previewBody"
+              aria-expanded="true"
+              data-i18n-aria-label="previewCollapse"
+              aria-label="收起游戏内效果参考"
+            >
+              <svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16">
+                <path
+                  d="M3.5 10.5 8 6l4.5 4.5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                />
+              </svg>
+            </button>
+          </div>
+          <div id="previewBody" class="preview-body">
+            <div class="preview-frame">
+              <div class="preview-crosshair" aria-hidden="true"></div>
+              <canvas
+                id="overlayPreview"
+                class="overlay-preview"
+                width="640"
+                height="210"
+                aria-label="Info Box preview"
+              ></canvas>
+            </div>
+            <p
+              id="previewStatus"
+              class="help preview-status"
+              role="status"
+              aria-live="polite"
+              hidden
+            ></p>
+            <p class="help" data-i18n="previewNote">函数在游戏外无法取值，预览会用示例数据代替。</p>
+            <p
+              id="previewColorNote"
+              class="help preview-color-note"
+              data-i18n="previewColorFallback"
+              hidden
+            >
+              动态 Color Template 无法在游戏外求值，预览暂用白色；静态十六进制、from_hex 和 from_rgb
+              可直接模拟。
+            </p>
+          </div>
+        </section>
+
+        <section class="panel form-panel" aria-labelledby="formTitle">
+          <div class="section-heading">
+            <h2 id="formTitle" data-i18n="formTitle">填写 Info Box</h2>
+            <span id="validationDot" class="validation-dot" aria-hidden="true"></span>
+          </div>
+          <div id="draftNotice" class="draft-notice" role="status" aria-live="polite" hidden>
+            <p id="draftNoticeMessage"></p>
+            <div class="draft-notice-actions">
+              <button
+                type="button"
+                id="loadIncomingDraftButton"
+                class="mini-button"
+                hidden
+              ></button>
+              <button type="button" id="keepCurrentDraftButton" class="mini-button" hidden></button>
+            </div>
+          </div>
+          <form id="configForm" aria-labelledby="formTitle" novalidate>
+            <label class="field">
+              <span class="field-label"><span data-i18n="templateLabel">选择示例</span></span>
+              <select id="templateSelect" name="template"></select>
+              <small class="help" data-i18n="templateHelp"
+                >先载入一个接近需求的示例，再按自己的想法修改。</small
+              >
+            </label>
+
+            <div class="field">
+              <label class="field-label" for="contentInput"
+                ><span data-i18n="contentLabel">信息框内容</span
+                ><em data-i18n="requiredMark">必填</em></label
+              >
+              <div class="content-editor">
+                <pre
+                  class="content-highlight"
+                  aria-hidden="true"
+                ><code id="contentHighlight"></code></pre>
+                <textarea
+                  id="contentInput"
+                  name="content"
+                  rows="18"
+                  spellcheck="false"
+                  data-i18n-placeholder="contentPlaceholder"
+                  placeholder="例如：&amp;a{fps} FPS"
+                  aria-describedby="contentHelp contentError"
+                ></textarea>
+              </div>
+              <small id="contentHelp" class="help" data-i18n="contentHelp"
+                >普通文字和 {fps} 这类函数可以混合使用；换行请直接回车。</small
+              >
+              <div class="toolbar">
+                <span class="content-color-tool">
+                  <label for="contentColorPicker" data-i18n="contentColorLabel">文字颜色</label>
+                  <input
+                    id="contentColorPicker"
+                    class="content-color-picker"
+                    type="color"
+                    value="#55ff55"
+                  />
+                  <button
+                    type="button"
+                    id="applyContentColorButton"
+                    class="mini-button"
+                    data-i18n="applyContentColorLabel"
+                  >
+                    应用颜色
+                  </button>
+                </span>
+                <button
+                  type="button"
+                  id="copyContentButton"
+                  class="mini-button"
+                  data-i18n="copyContent"
+                >
+                  复制 Content
+                </button>
+                <button
+                  type="button"
+                  id="toggleGlyphPickerButton"
+                  class="mini-button glyph-entry-button"
+                  data-i18n="glyphOpen"
+                  aria-controls="glyphPicker"
+                  aria-expanded="false"
+                >
+                  插入字符
+                </button>
+                <button
+                  type="button"
+                  id="formatContentButton"
+                  class="mini-button"
+                  data-i18n="formatContent"
+                >
+                  美化内容
+                </button>
+                <button
+                  type="button"
+                  id="lintContentButton"
+                  class="mini-button"
+                  data-i18n="lintContent"
+                >
+                  检查语法
+                </button>
+                <button
+                  type="button"
+                  id="undoConfigButton"
+                  class="mini-button"
+                  data-i18n="undoConfig"
+                  disabled
+                >
+                  撤销替换
+                </button>
+                <button
+                  type="button"
+                  id="openAiAssistantButton"
+                  class="mini-button ai-entry-button"
+                >
+                  <span class="ai-entry-spark" aria-hidden="true">✦</span>
+                  <span data-i18n="aiOpen">AI 帮我设计</span>
+                </button>
+              </div>
+              <section
+                id="glyphPicker"
+                class="glyph-picker"
+                aria-labelledby="glyphPickerTitle"
+                hidden
+              >
+                <div class="glyph-picker-heading">
+                  <div>
+                    <h3 id="glyphPickerTitle" data-i18n="glyphTitle">Wynntils 特殊字符</h3>
+                    <p data-i18n="glyphHelp">
+                      点击字符会替换当前选区；连续点击会从上次插入位置继续。标题结构字符本身不可见，高亮层会显示其可读标记。
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    id="closeGlyphPickerButton"
+                    class="glyph-picker-close"
+                    data-i18n-aria-label="glyphClose"
+                    aria-label="收起字符工具"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div class="glyph-group">
+                  <h4 data-i18n="glyphLetters">标题字母 A–Z</h4>
+                  <div id="glyphLetterGrid" class="glyph-grid"></div>
+                </div>
+                <div class="glyph-picker-lower">
+                  <div class="glyph-group">
+                    <h4 data-i18n="glyphSymbols">数字与符号</h4>
+                    <div id="glyphSymbolGrid" class="glyph-grid"></div>
+                  </div>
+                  <div class="glyph-group">
+                    <h4 data-i18n="glyphControls">标题结构</h4>
+                    <div id="glyphControlGrid" class="glyph-control-grid"></div>
+                  </div>
+                </div>
+              </section>
+              <small class="error" id="contentError" role="alert"></small>
+            </div>
+
+            <label class="field">
+              <span class="field-label"
+                ><span data-i18n="enabledTemplateLabel">Enabled Template</span
+                ><em data-i18n="optionalMark">可选</em></span
+              >
+              <input
+                id="enabledTemplateInput"
+                name="enabledTemplate"
+                type="text"
+                spellcheck="false"
+                data-i18n-placeholder="enabledTemplatePlaceholder"
+                placeholder="例如：{greater_than(health;0)}"
+                aria-describedby="enabledTemplateHelp enabledTemplateError"
+              />
+              <small id="enabledTemplateHelp" class="help" data-i18n="enabledTemplateHelp"
+                >留空则总是显示；填写时必须是返回 Boolean 的单个表达式。</small
+              >
+              <small class="error" id="enabledTemplateError" role="alert"></small>
+            </label>
+
+            <details class="advanced-settings" id="advancedSettings">
+              <summary class="advanced-summary" data-i18n="advancedSettings">高级设置</summary>
+              <div class="advanced-body">
+                <div class="field-grid two">
+                  <label class="field">
+                    <span class="field-label"
+                      ><span data-i18n="colorTemplateLabel">Color Template</span
+                      ><em data-i18n="optionalMark">可选</em></span
+                    >
+                    <input
+                      id="colorTemplateInput"
+                      name="colorTemplate"
+                      type="text"
+                      spellcheck="false"
+                      data-i18n-placeholder="colorTemplatePlaceholder"
+                      placeholder="例如：#FFFFFF 或 {from_rgb(255;255;255)}"
+                      aria-describedby="colorTemplateHelp colorTemplateError"
+                    />
+                    <small id="colorTemplateHelp" class="help" data-i18n="colorTemplateHelp"
+                      >可留空使用游戏默认颜色，也可填写 #RRGGBB、#RRGGBBAA 或颜色函数。</small
+                    >
+                    <small class="error" id="colorTemplateError"></small>
+                  </label>
+                  <label class="field">
+                    <span class="field-label"
+                      ><span data-i18n="textShadowLabel">文本阴影</span></span
+                    >
+                    <select
+                      id="textShadowInput"
+                      name="textShadow"
+                      aria-describedby="textShadowHelp"
+                    >
+                      <option value="OUTLINE" data-i18n="shadowOutline">Outline（描边）</option>
+                      <option value="NORMAL" data-i18n="shadowNormal">Normal（普通阴影）</option>
+                      <option value="NONE" data-i18n="shadowNone">None（无阴影）</option>
+                    </select>
+                    <small id="textShadowHelp" class="help" data-i18n="textShadowHelp"
+                      >Outline 最清晰，Normal 更轻，None 不加阴影。</small
+                    >
+                  </label>
+                </div>
+
+                <div class="field-grid two">
+                  <label class="field">
+                    <span class="field-label"
+                      ><span data-i18n="fontScaleLabel">字体大小</span></span
+                    >
+                    <input
+                      id="fontScaleInput"
+                      name="fontScale"
+                      type="number"
+                      min="0.1"
+                      max="8"
+                      step="0.1"
+                      value="1"
+                      aria-describedby="fontScaleHelp fontScaleError"
+                    />
+                    <small id="fontScaleHelp" class="help" data-i18n="fontScaleHelp"
+                      >1.0 是游戏默认大小，建议先在 0.8–1.5 之间尝试。</small
+                    >
+                    <small class="error" id="fontScaleError"></small>
+                  </label>
+                  <label class="field checkbox-field">
+                    <span class="field-label"><span data-i18n="fitTextLabel">Fit Text</span></span>
+                    <span class="toggle-row"
+                      ><input
+                        id="fitTextInput"
+                        name="fitText"
+                        type="checkbox"
+                        aria-describedby="fitTextHelp"
+                      /><span class="toggle" aria-hidden="true"></span
+                      ><span class="toggle-value" data-i18n="fitTextToggle"
+                        >开启自动缩放</span
+                      ></span
+                    >
+                    <small id="fitTextHelp" class="help" data-i18n="fitTextHelp"
+                      >让文字自动适应信息框宽度。</small
+                    >
+                  </label>
+                </div>
+
+                <div class="field-grid two">
+                  <label class="field">
+                    <span class="field-label"
+                      ><span data-i18n="backgroundColorLabel">Background Color</span></span
+                    >
+                    <input
+                      id="backgroundColorInput"
+                      name="backgroundColor"
+                      type="text"
+                      spellcheck="false"
+                      data-i18n-placeholder="backgroundColorPlaceholder"
+                      placeholder="例如：#00000080"
+                      aria-describedby="backgroundColorHelp backgroundColorError"
+                    />
+                    <small id="backgroundColorHelp" class="help" data-i18n="backgroundColorHelp"
+                      >使用 #RRGGBB 或 #RRGGBBAA；最后两位是透明度。</small
+                    >
+                    <small class="error" id="backgroundColorError"></small>
+                  </label>
+                  <label class="field">
+                    <span class="field-label"
+                      ><span data-i18n="borderWidthLabel">Background Border Width</span></span
+                    >
+                    <input
+                      id="borderWidthInput"
+                      name="backgroundBorderWidth"
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value="1"
+                      aria-describedby="borderWidthHelp backgroundBorderWidthError"
+                    />
+                    <small id="borderWidthHelp" class="help" data-i18n="borderWidthHelp"
+                      >背景四周的留白宽度；0 表示不留边。</small
+                    >
+                    <small class="error" id="backgroundBorderWidthError"></small>
+                  </label>
+                </div>
+              </div>
+            </details>
+          </form>
+          <div
+            id="validationMessage"
+            class="validation-message"
+            role="status"
+            aria-live="polite"
+          ></div>
+        </section>
+
+        <section class="panel search-panel" aria-labelledby="searchTitle">
+          <div class="section-heading">
+            <div>
+              <h2 id="searchTitle" data-i18n="searchTitle">找一个函数</h2>
+            </div>
+            <span class="function-count" id="functionCount">459</span>
+          </div>
+          <label class="sr-only" for="functionSearch" data-i18n="searchFunctions"
+            >用中文描述或函数名搜索</label
+          >
+          <input
+            id="functionSearch"
+            type="search"
+            autocomplete="off"
+            data-i18n-placeholder="searchFunctions"
+            placeholder="用中文描述或函数名搜索"
+            aria-controls="functionResults"
+            aria-autocomplete="list"
+          />
+          <p class="help" data-i18n="searchHelp">
+            试试“帧率”“当前世界”“生命值”或 fps；点击结果即可插入内容。
+          </p>
+          <small class="help" data-i18n="categoryHelp"
+            >未搜索时按分类浏览全部函数；输入关键词可快速检索。</small
+          >
+          <div
+            id="functionResults"
+            class="function-results"
+            data-i18n-aria-label="functionResultsLabel"
+            aria-label="函数结果"
+          ></div>
+          <p id="functionResultsStatus" class="sr-only" role="status" aria-live="polite"></p>
+        </section>
+      </div>
+    </main>
+
+    <dialog class="ai-dialog" id="aiAssistantDialog" aria-labelledby="aiDialogTitle">
+      <div class="ai-shell">
+        <header class="ai-header">
+          <div>
+            <h2 id="aiDialogTitle" data-i18n="aiDialogTitle">AI Overlay 设计助手</h2>
+            <p data-i18n="aiDialogSubtitle">
+              使用你自己的兼容端点，把想法整理成可填写的 Info Box 内容。
+            </p>
+          </div>
+          <button
+            type="button"
+            id="closeAiAssistantButton"
+            class="ai-icon-button"
+            data-i18n-aria-label="aiClose"
+            aria-label="关闭 AI 助手"
+          >
+            ×
+          </button>
+        </header>
+
+        <details class="ai-settings" id="aiSettings" open>
+          <summary data-i18n="aiSettings">连接设置</summary>
+          <div class="ai-settings-body">
+            <div class="ai-settings-grid">
+              <label class="ai-setting ai-endpoint-setting">
+                <span data-i18n="aiEndpointLabel">兼容 API 端点</span>
+                <input
+                  id="aiEndpointInput"
+                  type="url"
+                  inputmode="url"
+                  autocomplete="off"
+                  spellcheck="false"
+                  required
+                  data-i18n-placeholder="aiEndpointPlaceholder"
+                  placeholder="例如：https://api.openai.com/v1"
+                />
+                <small class="ai-setting-help" data-i18n="aiEndpointHelp">
+                  可直接填写 /v1；发送消息时会自动补全 /chat/completions。远程端点须使用 HTTPS，
+                  localhost 可使用 HTTP。
+                </small>
+              </label>
+              <div class="ai-setting ai-model-setting">
+                <label for="aiModelInput" data-i18n="aiModelLabel">模型</label>
+                <div class="ai-model-row">
+                  <input
+                    id="aiModelInput"
+                    type="text"
+                    autocomplete="off"
+                    spellcheck="false"
+                    required
+                    data-i18n-placeholder="aiModelPlaceholder"
+                    placeholder="例如：gpt-4.1-mini"
+                  />
+                  <button
+                    type="button"
+                    id="fetchAiModelsButton"
+                    class="ai-model-fetch"
+                    data-i18n="aiFetchModels"
+                  >
+                    获取模型
+                  </button>
+                </div>
+                <label class="sr-only" for="aiModelSelect" data-i18n="aiModelSelectLabel">
+                  已获取的模型
+                </label>
+                <select id="aiModelSelect" hidden>
+                  <option value="" data-i18n="aiModelSelectPlaceholder">选择已获取的模型</option>
+                </select>
+                <span
+                  class="ai-model-status"
+                  id="aiModelsStatus"
+                  role="status"
+                  aria-live="polite"
+                ></span>
+              </div>
+              <label class="ai-setting ai-key-setting">
+                <span data-i18n="aiApiKeyLabel">API Key（按端点要求填写）</span>
+                <span class="ai-key-row">
+                  <input
+                    id="aiApiKeyInput"
+                    type="password"
+                    autocomplete="off"
+                    spellcheck="false"
+                    data-i18n-placeholder="aiApiKeyPlaceholder"
+                    placeholder="本地或已代理端点通常可留空"
+                  />
+                  <button type="button" id="toggleAiKeyButton" class="ai-key-toggle">显示</button>
+                </span>
+              </label>
+            </div>
+            <p class="ai-security-note" data-i18n="aiSecurity">
+              Key 不会保存到浏览器存储。发送时，对话、当前 Overlay
+              配置与少量本地函数检索结果会传给你填写的端点；请只使用可信且允许浏览器 CORS
+              请求的服务。
+            </p>
+          </div>
+        </details>
+
+        <div class="ai-messages" id="aiMessages" role="log" aria-live="polite"></div>
+
+        <div class="ai-proposal" id="aiProposalBar" hidden>
+          <span data-i18n="aiProposalReady">检测到可以应用的 Content</span>
+          <button
+            type="button"
+            id="applyAiProposalButton"
+            class="button primary"
+            data-i18n="aiApplyProposal"
+          >
+            应用到信息框
+          </button>
+        </div>
+
+        <form class="ai-composer" id="aiChatForm">
+          <label class="sr-only" for="aiPromptInput" data-i18n="aiPromptLabel">设计需求</label>
+          <textarea
+            id="aiPromptInput"
+            rows="3"
+            required
+            data-i18n-placeholder="aiPromptPlaceholder"
+            placeholder="例如：显示当前世界、FPS 和生命值，整体使用青绿色。"
+          ></textarea>
+          <div class="ai-composer-footer">
+            <span class="ai-status" id="aiStatus" role="status" aria-live="polite"></span>
+            <div class="ai-composer-actions">
+              <button type="button" id="clearAiChatButton" class="button" data-i18n="aiClear">
+                清空对话
+              </button>
+              <button
+                type="button"
+                id="cancelAiRequestButton"
+                class="button"
+                data-i18n="aiCancel"
+                hidden
+              >
+                取消
+              </button>
+              <button type="submit" id="aiSendButton" class="button primary" data-i18n="aiSend">
+                发送
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="js/functions.generated.js?v=4.2.8"></script>
+    <script src="js/functions.zh.js?v=2"></script>
+    <script src="js/resources.generated.js?v=2"></script>
+    <script src="js/template-parser.js?v=3"></script>
+    <script src="js/simulation-profile.js?v=5"></script>
+    <script src="js/template-simulator.js?v=7"></script>
+    <script src="js/draft-store.js?v=3"></script>
+    <script src="js/canvas-renderer.js?v=7"></script>
+    <script src="js/template-highlighter.js?v=8"></script>
+    <script src="js/markdown-renderer.js?v=1"></script>
+    <script src="js/ai-assistant.js?v=11"></script>
+    <script src="js/function-catalog.js?v=2"></script>
+    <script src="js/editor-formatting.js?v=3"></script>
+    <script src="js/editor-core.js?v=24"></script>
+    <script src="js/preview-controller.js?v=2"></script>
+    <script src="js/function-browser.js?v=1"></script>
+    <script src="js/ai-controller.js?v=1"></script>
+    <script src="js/app.js?v=23"></script>
+  </body>
+</html>

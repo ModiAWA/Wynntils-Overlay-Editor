@@ -1,0 +1,94 @@
+name: Sync Wynntils resources
+
+on:
+  schedule:
+    - cron: '41 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Optional Wynntils release tag or commit
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-wynntils-resources
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Refresh official font resources
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      WYNNTILS_RESOURCES_REF: ${{ inputs.ref || '' }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate from Wynntils official resources
+        run: node scripts/sync-resources.mjs
+
+      - name: Verify generated resources
+        run: |
+          node --check js/resources.generated.js
+          pnpm test:frontend
+          git diff --check
+
+      - name: Detect changes
+        id: changes
+        shell: bash
+        run: |
+          if git diff --quiet -- js/resources.generated.js THIRD_PARTY_NOTICES.md assets/fonts; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open or update pull request
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          branch="automation/wynntils-resources"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$branch"
+          git add js/resources.generated.js THIRD_PARTY_NOTICES.md assets/fonts
+          git commit -m "chore(data): sync official Wynntils resources"
+          remote_sha="$(git ls-remote --heads origin "$branch" | cut -f1)"
+          if [ -n "$remote_sha" ]; then
+            git push --force-with-lease="refs/heads/$branch:$remote_sha" origin "HEAD:$branch"
+          else
+            git push --set-upstream origin "HEAD:$branch"
+          fi
+
+          existing_pr="$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')"
+          if [ -z "$existing_pr" ]; then
+            gh pr create \
+              --base "${{ github.event.repository.default_branch }}" \
+              --head "$branch" \
+              --title "chore(data): sync official Wynntils resources" \
+              --body "Refreshes the offline Wynntils font manifests and PNG assets through the GitHub Contents API. Generated data and editor tests passed before this PR was opened."
+          fi
