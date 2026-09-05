@@ -102,7 +102,7 @@
         colorTemplateHelp: '可留空使用游戏默认颜色，也可填写 #RRGGBB、#RRGGBBAA 或颜色函数。',
         colorTemplatePlaceholder: '例如：#FFFFFF 或 {from_rgb(255;255;255)}',
         textShadowLabel: '文本阴影',
-        textShadowHelp: 'Outline 最清晰，Normal 更轻，None 不加阴影。',
+        textShadowHelp: 'Outline 描边最清晰；Normal 使用较淡的偏移阴影；None 不添加阴影。',
         fontScaleLabel: '字体大小',
         fontScaleHelp: '1.0 是游戏默认大小，建议先在 0.8–1.5 之间尝试。',
         fitTextLabel: '自动缩放（Fit Text）',
@@ -298,7 +298,8 @@
           'Leave blank for the game default, or use #RRGGBB, #RRGGBBAA, or a color function.',
         colorTemplatePlaceholder: 'Example: #FFFFFF or {from_rgb(255;255;255)}',
         textShadowLabel: 'Text shadow',
-        textShadowHelp: 'Outline is clearest, Normal is lighter, and None disables the shadow.',
+        textShadowHelp:
+          'Outline adds a crisp stroke; Normal uses a subtle offset shadow; None adds no shadow.',
         fontScaleLabel: 'Font size',
         fontScaleHelp: '1.0 is the game default; start between 0.8 and 1.5.',
         fitTextLabel: 'Fit Text',
