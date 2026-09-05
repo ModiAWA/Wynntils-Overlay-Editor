@@ -1,7 +1,7 @@
 {
-  "name": "wynntils-editor",
+  "name": "wynntils-overlay-editor",
   "version": "0.1.0",
-  "description": "Offline Wynntils Info Box editor and preview",
+  "description": "Offline browser-based editor and previewer for Wynntils Overlay Info Boxes",
   "license": "MIT",
   "private": true,
   "packageManager": "pnpm@11.16.0",
@@ -9,13 +9,13 @@
     "node": ">=22"
   },
   "scripts": {
-    "format": "prettier --write \"README.md\" \"LICENSES/README.md\" \".github/**/*.{yml,yaml}\" \"index.html\" \"styles.css\" \"js/{ai-assistant,ai-controller,app,canvas-renderer,draft-store,editor-core,editor-formatting,function-browser,function-catalog,functions.zh,markdown-renderer,preview-controller,simulation-profile,template-highlighter,template-parser,template-simulator}.js\" \"js/resources.generated.js\" \"playwright.config.js\" \"tests/**/*.{js,mjs}\" \"scripts/**/*.mjs\"",
+    "format": "prettier --write \"README.md\" \"README.en.md\" \"LICENSES/README.md\" \"docs/**/*.md\" \".github/**/*.{yml,yaml}\" \"index.html\" \"styles.css\" \"js/{ai-assistant,ai-controller,app,canvas-renderer,draft-store,editor-core,editor-formatting,function-browser,function-catalog,functions.zh,markdown-renderer,preview-controller,simulation-profile,template-highlighter,template-parser,template-simulator}.js\" \"js/resources.generated.js\" \"playwright.config.js\" \"tests/**/*.{js,mjs}\" \"scripts/**/*.mjs\"",
     "sync:wynntils-functions": "node scripts/sync-functions.mjs",
     "check:wynntils-functions": "node scripts/sync-functions.mjs --check",
     "sync:wynntils-resources": "node scripts/sync-resources.mjs",
     "check:wynntils-resources": "node scripts/sync-resources.mjs --check",
     "check": "pnpm run check:format && pnpm run check:js",
-    "check:format": "prettier --check \"README.md\" \"LICENSES/README.md\" \".github/**/*.{yml,yaml}\" \"index.html\" \"styles.css\" \"js/{ai-assistant,ai-controller,app,canvas-renderer,draft-store,editor-core,editor-formatting,function-browser,function-catalog,functions.zh,markdown-renderer,preview-controller,simulation-profile,template-highlighter,template-parser,template-simulator}.js\" \"js/resources.generated.js\" \"playwright.config.js\" \"tests/**/*.{js,mjs}\" \"scripts/**/*.mjs\"",
+    "check:format": "prettier --check \"README.md\" \"README.en.md\" \"LICENSES/README.md\" \"docs/**/*.md\" \".github/**/*.{yml,yaml}\" \"index.html\" \"styles.css\" \"js/{ai-assistant,ai-controller,app,canvas-renderer,draft-store,editor-core,editor-formatting,function-browser,function-catalog,functions.zh,markdown-renderer,preview-controller,simulation-profile,template-highlighter,template-parser,template-simulator}.js\" \"js/resources.generated.js\" \"playwright.config.js\" \"tests/**/*.{js,mjs}\" \"scripts/**/*.mjs\"",
     "check:js": "node scripts/check-js.mjs",
     "test": "pnpm run test:frontend && pnpm run test:wynntils-browser",
     "test:frontend": "node --test tests/editor.test.js",
