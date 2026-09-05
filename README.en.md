@@ -23,6 +23,7 @@ See the [user guide](docs/en-US/user/README.md) for the complete editing workflo
 - [Development](docs/en-US/developer/README.md)
 - [Function and font resource synchronization](docs/en-US/developer/resource-sync.md)
 - [Architecture and data flow](docs/en-US/developer/architecture.md)
+- [Releases and tags](docs/en-US/developer/release.md)
 - [简体中文文档](docs/zh-CN/user/README.md)
 
 ## Highlights

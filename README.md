@@ -23,6 +23,7 @@ Wynntils Overlay Editor 是一个非官方社区工具，用于创建和预览 W
 - [开发与维护](docs/zh-CN/developer/README.md)
 - [函数和字体资源同步](docs/zh-CN/developer/resource-sync.md)
 - [架构与数据流](docs/zh-CN/developer/architecture.md)
+- [发版与标签](docs/zh-CN/developer/release.md)
 - [English documentation](docs/en-US/user/README.md)
 
 ## 主要特性
