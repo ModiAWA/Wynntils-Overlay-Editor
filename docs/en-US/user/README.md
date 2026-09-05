@@ -2,14 +2,14 @@
 
 [Documentation index](../../README.md) · [简体中文](../../zh-CN/user/README.md) · [Advanced usage](advanced-usage.md)
 
-This guide is for people using a hosted Wynntils Overlay Editor page. The editor currently focuses on editing, previewing, and copying Content for Wynntils Info Boxes.
+This guide is for people using a hosted Wynntils Overlay Editor page. The editor currently focuses on editing, previewing, and copying the Content of Wynntils Info Boxes.
 
 ## Basic workflow
 
 1. Open the hosted page provided for the project.
 2. Load the FPS, coordinates, or General Information example, or start with empty Content.
 3. Edit the template in the Content field. Use the function catalog on the right to search and insert expressions.
-4. Follow the preview and status messages to fix syntax, type, or unsupported-simulation warnings.
+4. Follow the preview and status messages to address syntax, type, or unsupported-simulation warnings.
 5. Adjust Color Template, shadow, font size, Fit Text, background, border, and other Info Box options.
 6. Select Copy Content, then create or edit an Info Box in Wynntils → Overlay Management.
 

@@ -15,7 +15,7 @@ pnpm install
 pnpm exec playwright install chromium
 ```
 
-The editor does not need node_modules at runtime. Dependencies are for development-time formatting, synchronization scripts, and automated tests.
+The editor does not need node_modules at runtime; dependencies serve development-time formatting, synchronization scripts, and automated tests.
 
 ## Common commands
 
@@ -85,6 +85,6 @@ Browsers load ordinary scripts in a fixed order without a bundler. When adding a
 - pnpm check:wynntils-functions
 - pnpm check:wynntils-resources
 - git diff --check
-- Verify links, commands, and version notes in both README files and the matching language docs.
+- Verify links, commands, and version notes in both README files and their matching language docs.
 
 For documentation-only changes, at minimum run pnpm format, pnpm check, and git diff --check; a full pnpm test is still recommended before delivery.

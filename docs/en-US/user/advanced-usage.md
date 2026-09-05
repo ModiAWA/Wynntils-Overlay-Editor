@@ -25,9 +25,9 @@ Keep these paths in the deployment:
 - js/
 - assets/
 
-GitHub Pages, Nginx, object-storage static websites, and similar services work. Do not upload only the HTML file: omitting generated function data, translations, or font bitmaps makes startup checks fail or produces an incomplete preview.
+GitHub Pages, Nginx, object-storage static sites, and similar services all work. Do not upload the HTML file alone: omitting the generated function data, translations, or font bitmaps makes the startup checks fail or leaves the preview incomplete.
 
-If a deployment still shows old modules, clear the site cache and confirm that the script version parameters in the HTML match the deployed files. The startup check lists missing required modules to make incomplete packages easier to diagnose.
+If a deployment still shows old modules, clear the site cache and confirm that the script version parameters in the HTML match the deployed files. The startup check lists the missing required modules so an incomplete package is easier to diagnose.
 
 ## AI endpoints and CORS
 

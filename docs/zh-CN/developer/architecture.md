@@ -16,11 +16,11 @@
             └─ 格式码、Color Template、字体 provider、控制序列和 glyph
 ```
 
-页面直接加载普通 JavaScript 文件，不使用 bundler。index.html 负责脚本顺序和必需模块检查；app.js 组装控制器，但稳定的编辑器契约保留在 editor-core.js。
+页面直接加载普通 JavaScript 文件，不使用 bundler。index.html 负责脚本顺序和必需模块检查；app.js 负责组装控制器，而稳定的编辑器契约保留在 editor-core.js。
 
 ## 编辑与高亮
 
-原生 textarea 是唯一的输入源，高亮层只根据同一文本生成可读视觉层。这样可以保留输入法、选择、撤销、屏幕阅读器和键盘行为，同时把解析范围提供给诊断和格式化。
+原生 textarea 是唯一的输入源，高亮层只根据同一文本生成可读的视觉层，从而保留输入法、选择、撤销、屏幕阅读器和键盘行为，并把解析范围提供给诊断和格式化。
 
 template-parser.js 负责 Wynntils 表达式边界、参数和后缀规则。editor-formatting.js 负责纯文本插入、AST 格式化、格式码扫描和颜色应用。引号、转义和嵌套范围必须由解析结果处理，不能只用全局字符计数。
 
@@ -28,9 +28,9 @@ template-parser.js 负责 Wynntils 表达式边界、参数和后缀规则。edi
 
 模拟器将函数调用转换为带声明类型的结果。依赖实时游戏状态的函数从 simulation-profile.js 读取固定示例值；不能安全或准确模拟的函数返回带原函数名的占位，并在预览状态中保留警告。
 
-模拟器和 Canvas 共享总文本预算，避免嵌套 repeat、leading_zeros 或其他函数生成超大字符串。用户提供的正则表达式不会传给 JavaScript RegExp，相关函数使用明确的 unsupported 结果，防止主线程被回溯模式阻塞。
+模拟器和 Canvas 共享总文本预算，避免嵌套的 repeat、leading_zeros 或其他函数生成超大字符串。用户提供的正则表达式不会传给 JavaScript RegExp，相关函数使用明确的 unsupported 结果，防止主线程被回溯模式阻塞。
 
-Canvas 先解析 Minecraft/Wynntils 格式码，再处理 Color Template、shader sentinel、字体命名空间、背景控制和负间距。模拟器发出的结构化 styled-text 控制序列必须被消费，不能作为普通文字绘制。
+Canvas 先解析 Minecraft/Wynntils 格式码，再处理 Color Template、shader sentinel、字体命名空间、背景控制和负间距。模拟器发出的结构化 styled-text 控制序列必须被消费，不能当作普通文字绘制。
 
 ## 状态和草稿
 

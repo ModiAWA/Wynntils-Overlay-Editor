@@ -19,9 +19,9 @@ node scripts/sync-functions.mjs --ref v4.2.8
 pnpm check:wynntils-functions
 ```
 
-The check command uses the generated snapshot's pinned ref by default, so routine CI is reproducible. The sync command follows the latest stable Release unless you provide a ref. Both commands accept an explicit --ref override.
+The check command uses the pinned ref recorded in the generated snapshot by default, so routine CI is reproducible. The sync command follows the latest stable Release unless you provide a ref. Both commands accept an explicit `--ref` override.
 
-The script rejects candidates missing source, registration class, return type, official English description, or key functions, and blocks anomalous drops in function count. Generated files must be updated by the script rather than edited by hand.
+The script rejects candidates that lack source, a registration class, a return type, an official English description, or key functions, and blocks anomalous drops in function count. Generated files should be updated by the script rather than edited by hand.
 
 ## Font resources
 

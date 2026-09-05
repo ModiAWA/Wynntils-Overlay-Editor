@@ -2,14 +2,14 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Wynntils Overlay Editor is an unofficial community tool for creating and previewing Wynntils overlays, with current focus on Info Box. It is a build-free static web page: most users can open a hosted deployment without installing Node.js or connecting it to another host project.
+Wynntils Overlay Editor is an unofficial community tool for creating and previewing Wynntils overlays, currently focused on Info Box. It is a build-free static web page: most users can open a hosted deployment without installing Node.js or connecting it to another host project.
 
-The tool does not export a complete Wynntils JSON document or create an in-game overlay for you. The preview uses fixed example values and is intended to check Content layout, colors, fonts, and formatting codes; the Wynntils game client remains the source of truth.
+The tool does not export a complete Wynntils JSON document or create an in-game overlay for you. The preview uses fixed example values and is meant to check Content layout, colors, fonts, and formatting codes; the Wynntils game client remains the source of truth.
 
 ## Quick use
 
 1. Open the hosted page provided for the project.
-2. Load an example or enter your own template in the Content field.
+2. Load an example, or enter your own template in the Content field.
 3. Search the function catalog, insert expressions, and follow the preview and validation messages.
 4. Adjust Info Box colors, fonts, shadows, background, border, and other options.
 5. Select Copy Content, then create or edit an Info Box in Wynntils → Overlay Management.
@@ -23,11 +23,12 @@ See the [user guide](docs/en-US/user/README.md) for the complete editing workflo
 - [Development](docs/en-US/developer/README.md)
 - [Function and font resource synchronization](docs/en-US/developer/resource-sync.md)
 - [Architecture and data flow](docs/en-US/developer/architecture.md)
+- [Releases and tags](docs/en-US/developer/release.md)
 - [简体中文文档](docs/zh-CN/user/README.md)
 
 ## Highlights
 
-- Edit Wynntils Content directly in the browser while keeping input method, selection, undo, and keyboard behavior.
+- Edit Wynntils Content directly in the browser while preserving input method, selection, undo, and keyboard behavior.
 - Offline function search, syntax highlighting, validation, examples, and Canvas preview.
 - Explicit example values or placeholders for functions that depend on live game state.
 - Optional OpenAI-compatible assistant; it never overwrites Content automatically and requires confirmation before applying a proposal.

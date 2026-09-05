@@ -28,13 +28,13 @@ template-parser.js defines Wynntils expression boundaries, arguments, and suffix
 
 The simulator converts function calls into results with declared types. Functions that depend on live game state read fixed example values from simulation-profile.js; functions that cannot be simulated safely or accurately return a placeholder containing the function name and keep a warning in preview state.
 
-The simulator and Canvas share a total text budget, preventing nested repeat, leading_zeros, or other functions from creating huge strings. User-provided regular expressions are never passed to JavaScript RegExp; those functions return an explicit unsupported result to keep backtracking patterns from blocking the main thread.
+The simulator and Canvas share a total text budget so that nested repeat, leading_zeros, or other functions cannot create huge strings. User-provided regular expressions are never passed to JavaScript RegExp; those functions return an explicit unsupported result to keep backtracking patterns from blocking the main thread.
 
 Canvas parses Minecraft and Wynntils formatting codes first, then handles Color Templates, shader sentinels, font namespaces, background controls, and negative advances. Structured styled-text controls emitted by the simulator must be consumed rather than drawn as ordinary text.
 
 ## State and drafts
 
-The preview controller distinguishes empty content, syntax pause, valid results, and results containing placeholders. Invalid syntax or configuration keeps and fades the last valid canvas; a single Canvas failure does not block editing, diagnostics, or draft storage.
+The preview controller distinguishes empty content, syntax pause, valid results, and results containing placeholders. Invalid syntax or configuration keeps and fades the last valid canvas; a single Canvas failure never blocks editing, diagnostics, or draft storage.
 
 Draft storage accepts only versioned schemas and an explicit Info Box configuration whitelist. API keys, AI endpoints, models, and conversations are excluded. Multi-tab conflicts use timestamps and user confirmation; damaged or unknown schemas never silently overwrite current content.
 
