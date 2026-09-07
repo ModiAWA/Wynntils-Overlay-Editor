@@ -259,6 +259,13 @@ test('official Wynntils resource parser preserves providers and rejects unsafe i
   });
   assert.equal(data.assets.five.width, 3);
   assert.match(Sync.renderResources(data), /WYNNTILS_FONT_RESOURCES/);
+  assert.match(
+    Sync.renderResources({
+      ...data,
+      assets: { five: { ...data.assets.five, hash: 'abcdef1234567890' } },
+    }),
+    /abcdef1234567890/,
+  );
   assert.throws(
     () =>
       Sync.parseManifest(
@@ -329,6 +336,86 @@ test('snapshot checks reuse the committed ref while explicit sync refs still win
     Sync.resolveRequestedRef({ check: false, ref: '', sourceDir: '' }, existingSource),
     '',
   );
+});
+
+test('cache version synchronization only increments changed numeric local assets', async () => {
+  const CacheVersions = await import(
+    pathToFileURL(path.join(ROOT, 'scripts', 'sync-cache-versions.mjs')).href
+  );
+  const temporaryDirectory = await fs.promises.mkdtemp(
+    path.join(os.tmpdir(), 'wynntils-editor-cache-versions-'),
+  );
+  const scriptsDirectory = path.join(temporaryDirectory, 'js');
+  const index = path.join(temporaryDirectory, 'index.html');
+  const manifest = path.join(temporaryDirectory, 'cache-versions.json');
+  await fs.promises.mkdir(scriptsDirectory);
+  await fs.promises.writeFile(path.join(temporaryDirectory, 'styles.css'), 'body {}\n');
+  await fs.promises.writeFile(path.join(scriptsDirectory, 'app.js'), 'window.app = 1;\n');
+  await fs.promises.writeFile(
+    index,
+    '<link href="styles.css?v=5"><script src="js/app.js?v=3"></script>\n',
+  );
+
+  try {
+    await CacheVersions.synchronize({ check: false, index, manifest });
+    await fs.promises.writeFile(path.join(scriptsDirectory, 'app.js'), 'window.app = 2;\n');
+    await CacheVersions.synchronize({ check: false, index, manifest });
+    let updatedIndex = await fs.promises.readFile(index, 'utf8');
+    assert.match(updatedIndex, /styles\.css\?v=5/);
+    assert.match(updatedIndex, /js\/app\.js\?v=4/);
+    await assert.doesNotReject(() => CacheVersions.synchronize({ check: true, index, manifest }));
+
+    await fs.promises.writeFile(
+      path.join(temporaryDirectory, 'styles.css'),
+      'body { color: red; }\n',
+    );
+    await assert.rejects(
+      () => CacheVersions.synchronize({ check: true, index, manifest }),
+      /Cache versions are stale/,
+    );
+    await CacheVersions.synchronize({ check: false, index, manifest });
+    updatedIndex = await fs.promises.readFile(index, 'utf8');
+    assert.match(updatedIndex, /styles\.css\?v=6/);
+    assert.match(updatedIndex, /js\/app\.js\?v=4/);
+  } finally {
+    await fs.promises.rm(temporaryDirectory, { recursive: true, force: true });
+  }
+});
+
+test('cache version synchronization hashes same-tag function snapshot changes', async () => {
+  const CacheVersions = await import(
+    pathToFileURL(path.join(ROOT, 'scripts', 'sync-cache-versions.mjs')).href
+  );
+  const temporaryDirectory = await fs.promises.mkdtemp(
+    path.join(os.tmpdir(), 'wynntils-editor-cache-functions-'),
+  );
+  const scriptsDirectory = path.join(temporaryDirectory, 'js');
+  const index = path.join(temporaryDirectory, 'index.html');
+  const manifest = path.join(temporaryDirectory, 'cache-versions.json');
+  await fs.promises.mkdir(scriptsDirectory);
+  await fs.promises.writeFile(path.join(scriptsDirectory, 'functions.generated.js'), 'one\n');
+  await fs.promises.writeFile(index, '<script src="js/functions.generated.js?v=4.2.8"></script>\n');
+  try {
+    await CacheVersions.synchronize({ check: false, index, manifest });
+    await fs.promises.writeFile(path.join(scriptsDirectory, 'functions.generated.js'), 'two\n');
+    await CacheVersions.synchronize({ check: false, index, manifest });
+    assert.match(
+      await fs.promises.readFile(index, 'utf8'),
+      /functions\.generated\.js\?v=4\.2\.8-[0-9a-f]{12}/,
+    );
+    await fs.promises.writeFile(path.join(scriptsDirectory, 'functions.generated.js'), 'three\n');
+    await CacheVersions.synchronize({ check: false, index, manifest });
+    assert.match(
+      await fs.promises.readFile(index, 'utf8'),
+      /functions\.generated\.js\?v=4\.2\.8-[0-9a-f]{12}/,
+    );
+    assert.doesNotMatch(
+      await fs.promises.readFile(index, 'utf8'),
+      /functions\.generated\.js\?v=4\.2\.8-[0-9a-f]{12}-[0-9a-f]{12}/,
+    );
+  } finally {
+    await fs.promises.rm(temporaryDirectory, { recursive: true, force: true });
+  }
 });
 
 test('semantic search understands Chinese descriptions and direct names', () => {
@@ -1430,6 +1517,10 @@ test('Canvas normalizes host asset bases and caps preview height', () => {
     Canvas.resolveAssetPath('assets/fonts/five.png'),
     'https://cdn.example/overlay/assets/fonts/five.png',
   );
+  assert.equal(
+    Canvas.resolveAssetPath('assets/fonts/five.png', 'abcdef1234567890'),
+    'https://cdn.example/overlay/assets/fonts/five.png?v=abcdef1234567890',
+  );
   delete SandboxContext.WynntilsOverlayEditorConfig;
 
   const context = {
@@ -1811,7 +1902,7 @@ test('function catalog is lazy and Escape fully closes searchable results', () =
   assert.match(css, /\.function-results\[hidden\][^{]*\{[^}]*display:\s*none/);
 });
 
-test('static entry point is offline-safe and loads translation data in order', () => {
+test('static entry point is offline-safe and loads translation data in order', async () => {
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   const app = fs.readFileSync(path.join(ROOT, 'js/app.js'), 'utf8');
   const css = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
@@ -1826,6 +1917,9 @@ test('static entry point is offline-safe and loads translation data in order', (
   );
   const dependabot = fs.readFileSync(path.join(ROOT, '.github', 'dependabot.yml'), 'utf8');
   const functionsSource = fs.readFileSync(path.join(ROOT, 'js/functions.generated.js'), 'utf8');
+  const CacheVersions = await import(
+    pathToFileURL(path.join(ROOT, 'scripts', 'sync-cache-versions.mjs')).href
+  );
   for (const file of [
     'js/function-catalog.js',
     'js/editor-formatting.js',
@@ -1845,9 +1939,9 @@ test('static entry point is offline-safe and loads translation data in order', (
   assert.match(playwrightConfig, /WYNNTILS_EDITOR_PORT/);
   assert.match(html, /<title>Wynntils Overlay Editor<\/title>/);
   assert.doesNotMatch(html, /(?:src|href)=["']https?:\/\//);
-  assert.match(html, /functions\.generated\.js\?v=4\.2\.8/);
+  assert.match(html, new RegExp(`functions\\.generated\\.js\\?v=${Meta.ref.replace(/^v/i, '')}`));
   assert.match(functionsSource, /Generated only from https:\/\/github\.com\/Wynntils\/Wynntils/);
-  assert.doesNotMatch(functionsSource, /ryanzhou|wynntils-functions/i);
+  assert.doesNotMatch(functionsSource, /wynntils-functions/i);
   assert.match(
     html,
     /functions\.generated\.js[\s\S]*functions\.zh\.js[\s\S]*resources\.generated\.js[\s\S]*template-parser\.js[\s\S]*simulation-profile\.js[\s\S]*template-simulator\.js[\s\S]*draft-store\.js[\s\S]*canvas-renderer\.js[\s\S]*template-highlighter\.js[\s\S]*markdown-renderer\.js[\s\S]*ai-assistant\.js[\s\S]*function-catalog\.js[\s\S]*editor-formatting\.js[\s\S]*editor-core\.js/,
@@ -1875,20 +1969,12 @@ test('static entry point is offline-safe and loads translation data in order', (
     html,
     /id="toggleGlyphPickerButton"[\s\S]*id="glyphPicker"[\s\S]*id="glyphLetterGrid"[\s\S]*id="glyphSymbolGrid"[\s\S]*id="glyphControlGrid"/,
   );
-  assert.match(html, /template-highlighter\.js\?v=8/);
-  assert.match(html, /template-parser\.js\?v=3/);
-  assert.match(html, /simulation-profile\.js\?v=5/);
-  assert.match(html, /template-simulator\.js\?v=7/);
-  assert.match(html, /draft-store\.js\?v=3/);
-  assert.match(html, /canvas-renderer\.js\?v=8/);
-  assert.match(html, /function-catalog\.js\?v=2/);
-  assert.match(html, /editor-formatting\.js\?v=3/);
-  assert.match(html, /editor-core\.js\?v=25/);
-  assert.match(html, /preview-controller\.js\?v=3/);
-  assert.match(html, /function-browser\.js\?v=1/);
-  assert.match(html, /ai-controller\.js\?v=1/);
-  assert.match(html, /styles\.css\?v=22/);
-  assert.match(html, /app\.js\?v=24/);
+  const cacheResult = await CacheVersions.synchronize({
+    check: true,
+    index: path.join(ROOT, 'index.html'),
+    manifest: path.join(ROOT, 'cache-versions.json'),
+  });
+  assert.equal(cacheResult.changed, false);
   assert.match(html, /<dialog[^>]+id="aiAssistantDialog"/);
   assert.match(html, /id="aiEndpointInput"[\s\S]*id="aiModelInput"[\s\S]*id="aiApiKeyInput"/);
   assert.match(
@@ -1908,6 +1994,7 @@ test('static entry point is offline-safe and loads translation data in order', (
     /guideTitle|guideOutput|generateGuideButton|copyGuideButton|downloadGuideButton/,
   );
   assert.match(app, /window\.WynntilsOverlayEditor = Object\.freeze/);
+  assert.match(app, /Missing #wynntils-overlay-editor root container/);
   assert.match(app, /function getLanguage\(\)/);
   assert.match(app, /function setLanguage\(language\)/);
   assert.match(app, /function toggleLanguage\(\)/);
@@ -1932,7 +2019,10 @@ test('static entry point is offline-safe and loads translation data in order', (
   assert.match(app, /navigator\.clipboard\.writeText\(fields\.content\.value\)/);
   assert.doesNotMatch(app, /generateGuide|copyGuide|downloadGuide|state\.guide/);
   assert.match(css, /\.preview-panel\s*\{[^}]*position:\s*sticky/s);
-  assert.match(packageSource, /"test:frontend":\s*"node --test tests\/editor\.test\.js"/);
+  assert.doesNotMatch(packageSource, /"(?:sync|check|test):[^"]+"/);
+  assert.match(packageSource, /"format":\s*"prettier --write/);
+  assert.match(packageSource, /"check":\s*"prettier --check/);
+  assert.match(packageSource, /"test":\s*"node --test tests\/editor\.test\.js && playwright test/);
   assert.match(packageSource, /"license":\s*"MIT"/);
   assert.match(packageSource, /"private":\s*true/);
   assert.match(license, /MIT License/);
@@ -1942,8 +2032,10 @@ test('static entry point is offline-safe and loads translation data in order', (
   const syncSource = fs.readFileSync(path.join(ROOT, 'scripts/sync-functions.mjs'), 'utf8');
   const resourceSyncSource = fs.readFileSync(path.join(ROOT, 'scripts/sync-resources.mjs'), 'utf8');
   assert.match(syncSource, /wynntils-editor-function-sync/);
-  assert.match(ci, /pnpm check:wynntils-functions/);
-  assert.match(ci, /pnpm check:wynntils-resources/);
+  assert.match(ci, /node scripts\/sync-functions\.mjs --check/);
+  assert.match(ci, /node scripts\/sync-resources\.mjs --check/);
+  assert.match(ci, /run: pnpm test/);
+  assert.doesNotMatch(ci, /pnpm (?:check|test):/);
   assert.match(resourceWorkflow, /node scripts\/sync-resources\.mjs/);
   assert.match(resourceWorkflow, /GITHUB_TOKEN/);
   assert.match(

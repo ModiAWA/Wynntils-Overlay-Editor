@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "assets": {
+    "styles.css": {
+      "hash": "75f946c7f9519af503d1fd11d38846b0b9d5ed87af28ba358fbe93f0e0384b84",
+      "version": "22"
+    },
+    "js/functions.generated.js": {
+      "hash": "346d6ed522a2aa61b2c472a46fd3886962ca74361762482661a0143cc7fbde58",
+      "version": "4.2.8"
+    },
+    "js/functions.zh.js": {
+      "hash": "7ce6145c898c8c91d31238a80b8e44c4a383753b2ac3934bdf7dbb4de4538641",
+      "version": "2"
+    },
+    "js/resources.generated.js": {
+      "hash": "4fc13c3e15a44dcfde112745ba3c333dafcf9b295ef60a069b993f69df5b8ad7",
+      "version": "3"
+    },
+    "js/template-parser.js": {
+      "hash": "59385d84eb5f31e1c19aad9cd6e9f797e23558864b9bdf24a7411c3c84f1fb99",
+      "version": "3"
+    },
+    "js/simulation-profile.js": {
+      "hash": "5c4e797d0f05ebb10ad7bdab5d637b860bacf4da717c8fc5a17dc4cb1a825758",
+      "version": "5"
+    },
+    "js/template-simulator.js": {
+      "hash": "e947e23caa8e9c9c9c0fa6c6ac0deca54aa4691425448df804a4b81707b5be53",
+      "version": "7"
+    },
+    "js/draft-store.js": {
+      "hash": "3444f17ce2d1fd3b98e8d2b97e93127399b355c6daa0a542786851b8d0a9b0bc",
+      "version": "3"
+    },
+    "js/canvas-renderer.js": {
+      "hash": "f3a0cdc2ab9809c590543691c4d262f1f415aaccd443322ae76401022db456b9",
+      "version": "9"
+    },
+    "js/template-highlighter.js": {
+      "hash": "0e3eaa3b62a876361d5f6915ceb5d8ff0dcccb760b5801b484c30013cbaa1336",
+      "version": "8"
+    },
+    "js/markdown-renderer.js": {
+      "hash": "9891b36ea21ce583b2451ee27b3c7d7a73f93ab55b2f409dff06a7d70797eb36",
+      "version": "1"
+    },
+    "js/ai-assistant.js": {
+      "hash": "a7de51fb0773a0eeebab901577858ac19ad9294c61a9bd9c661493139fadab53",
+      "version": "11"
+    },
+    "js/function-catalog.js": {
+      "hash": "c1cfc202546f1b3540756fd2c0a7c50ba4a1fff90c843ba903c3112ac5a7214f",
+      "version": "2"
+    },
+    "js/editor-formatting.js": {
+      "hash": "049429a9678373015350ffd99f38efcfd00de3f2996d3ec604a3ee0a852f3ca2",
+      "version": "3"
+    },
+    "js/editor-core.js": {
+      "hash": "116c75c6174f1a2d4db6678a6beed7bddbd0272d7d70bec13ba33164b41db094",
+      "version": "25"
+    },
+    "js/preview-controller.js": {
+      "hash": "2efc7a11dca55106587eec585be762133df3edffb9442e69f6b3fa0cefaead8e",
+      "version": "3"
+    },
+    "js/function-browser.js": {
+      "hash": "470bed297d9fe4015dfe0b6659a8f643d27c3d0fb9798f3efd231fbc50a977a2",
+      "version": "1"
+    },
+    "js/ai-controller.js": {
+      "hash": "39518d7527297307bba8acc1792fbc9631a68a484ffe784fcaa4e164e918d552",
+      "version": "1"
+    },
+    "js/app.js": {
+      "hash": "9fe7c6df9169fac3935cf10b964f6c0ce7f8b33741f725abd21bcb183020fb08",
+      "version": "25"
+    }
+  }
+}

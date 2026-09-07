@@ -41,6 +41,9 @@ jobs:
       - name: Generate from Wynntils official sources
         run: node scripts/sync-functions.mjs
 
+      - name: Synchronize browser cache versions
+        run: node scripts/sync-cache-versions.mjs
+
       - name: Verify generated editor data
         run: |
           node --check js/functions.generated.js
@@ -52,7 +55,7 @@ jobs:
         id: changes
         shell: bash
         run: |
-          if git diff --quiet -- js/functions.generated.js index.html; then
+          if git diff --quiet -- js/functions.generated.js index.html cache-versions.json; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -68,7 +71,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -C "$branch"
-          git add js/functions.generated.js index.html
+          git add js/functions.generated.js index.html cache-versions.json
           git commit -m "chore(data): sync official Wynntils functions"
           remote_sha="$(git ls-remote --heads origin "$branch" | cut -f1)"
           if [ -n "$remote_sha" ]; then

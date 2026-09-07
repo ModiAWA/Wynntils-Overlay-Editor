@@ -49,17 +49,20 @@ jobs:
       - name: Generate from Wynntils official resources
         run: node scripts/sync-resources.mjs
 
+      - name: Synchronize browser cache versions
+        run: node scripts/sync-cache-versions.mjs
+
       - name: Verify generated resources
         run: |
           node --check js/resources.generated.js
-          pnpm test:frontend
+          node --test tests/editor.test.js
           git diff --check
 
       - name: Detect changes
         id: changes
         shell: bash
         run: |
-          if git diff --quiet -- js/resources.generated.js THIRD_PARTY_NOTICES.md assets/fonts; then
+          if git diff --quiet -- js/resources.generated.js THIRD_PARTY_NOTICES.md assets/fonts cache-versions.json index.html; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -75,7 +78,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -C "$branch"
-          git add js/resources.generated.js THIRD_PARTY_NOTICES.md assets/fonts
+          git add js/resources.generated.js THIRD_PARTY_NOTICES.md assets/fonts cache-versions.json index.html
           git commit -m "chore(data): sync official Wynntils resources"
           remote_sha="$(git ls-remote --heads origin "$branch" | cut -f1)"
           if [ -n "$remote_sha" ]; then

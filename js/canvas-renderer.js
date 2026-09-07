@@ -14,13 +14,16 @@
     return base.endsWith('/') ? base : `${base}/`;
   }
 
-  function resolveAssetPath(assetPath) {
+  function resolveAssetPath(assetPath, assetVersion = '') {
     const path = String(assetPath || '');
     const base = getAssetBase();
     try {
-      return new URL(path, new URL(base, globalThis.document?.baseURI || 'http://localhost/')).href;
+      const url = new URL(path, new URL(base, globalThis.document?.baseURI || 'http://localhost/'));
+      if (assetVersion) url.searchParams.set('v', String(assetVersion));
+      return url.href;
     } catch (_error) {
-      return `${base.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
+      const fallback = `${base.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
+      return assetVersion ? `${fallback}?v=${encodeURIComponent(assetVersion)}` : fallback;
     }
   }
 
@@ -529,7 +532,7 @@
               { once: true },
             );
             image.addEventListener('error', resolve, { once: true });
-            image.src = resolveAssetPath(asset.path);
+            image.src = resolveAssetPath(asset.path, asset.hash);
           }),
       );
       return Promise.all(pending);

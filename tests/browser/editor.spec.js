@@ -206,7 +206,7 @@ test('assetBase reroutes bundled font requests for host deployments', async ({ p
     return window.WynntilsOverlayEditor.refresh();
   });
   await expect
-    .poll(() => assetRequests.some((url) => url.endsWith('/overlay/assets/fonts/five.png')))
+    .poll(() => assetRequests.some((url) => url.includes('/overlay/assets/fonts/five.png?v=')))
     .toBe(true);
   expect(
     await page.evaluate(() =>

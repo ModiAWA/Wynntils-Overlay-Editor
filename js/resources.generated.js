@@ -20,36 +20,43 @@
         path: 'assets/fonts/five.png',
         width: 112,
         height: 21,
+        hash: '776ec7c320c3fb9e',
       },
       ribbon_start: {
         path: 'assets/fonts/ribbon_start.png',
         width: 7,
         height: 8,
+        hash: '231f17131194d4b4',
       },
       ribbon_end: {
         path: 'assets/fonts/ribbon_end.png',
         width: 7,
         height: 8,
+        hash: 'c7310023af7295f9',
       },
       flag_start: {
         path: 'assets/fonts/flag_start.png',
         width: 5,
         height: 7,
+        hash: '19335da9b5ffce6a',
       },
       flag_end: {
         path: 'assets/fonts/flag_end.png',
         width: 5,
         height: 7,
+        hash: 'd78d2fa036b26ccb',
       },
       box_start: {
         path: 'assets/fonts/box_start.png',
         width: 2,
         height: 7,
+        hash: 'fa430542719f018c',
       },
       box_end: {
         path: 'assets/fonts/box_end.png',
         width: 2,
         height: 7,
+        hash: 'fa430542719f018c',
       },
     },
     fonts: {

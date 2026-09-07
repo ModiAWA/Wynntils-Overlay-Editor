@@ -69,6 +69,16 @@
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const editorRoot = document.getElementById('wynntils-overlay-editor');
 
+  if (!editorRoot) {
+    const error = document.createElement('div');
+    error.className = 'startup-error';
+    error.setAttribute('role', 'alert');
+    error.textContent = 'Wynntils editor could not start. Missing #wynntils-overlay-editor.';
+    document.body?.append(error);
+    console.error('[wynntils-editor] Missing #wynntils-overlay-editor root container.');
+    return;
+  }
+
   const TITLE_CONTROL_INSERTS = Object.freeze([
     Object.freeze({ labelKey: 'glyphControlStart', value: '\uE010\u2064' }),
     Object.freeze({ labelKey: 'glyphControlCell', value: '\uE00F\uE012' }),
