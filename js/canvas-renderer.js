@@ -8,6 +8,22 @@
 })(typeof globalThis !== 'undefined' ? globalThis : window, function (resources, profile) {
   'use strict';
 
+  function getAssetBase() {
+    const configured = globalThis.WynntilsOverlayEditorConfig?.assetBase;
+    const base = configured == null || configured === '' ? './' : String(configured);
+    return base.endsWith('/') ? base : `${base}/`;
+  }
+
+  function resolveAssetPath(assetPath) {
+    const path = String(assetPath || '');
+    const base = getAssetBase();
+    try {
+      return new URL(path, new URL(base, globalThis.document?.baseURI || 'http://localhost/')).href;
+    } catch (_error) {
+      return `${base.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
+    }
+  }
+
   const MC_COLORS = Object.freeze({
     0: '#000000FF',
     1: '#0000AAFF',
@@ -29,6 +45,7 @@
 
   const DEFAULT_COLOR = '#FFFFFFFF';
   const MAX_RENDER_INPUT_LENGTH = profile.MAX_PREVIEW_TEXT_LENGTH || 4096;
+  const MAX_PREVIEW_HEIGHT = 2048;
   const SHADER_BY_COLOR = new Map(
     Object.entries(profile.SHADER_COLORS || {}).map(([name, color]) => [
       normalizeHexColor(color).slice(0, 7),
@@ -475,10 +492,12 @@
       this.images = new Map();
       this.bitmapCache = new Map();
       this.lastRender = null;
+      this.assetLoadGeneration = 0;
       this.loadAssets();
     }
 
     loadAssets() {
+      const generation = ++this.assetLoadGeneration;
       if (typeof Image === 'undefined') return Promise.resolve();
       const pending = Object.entries(resources.assets || {}).map(
         ([name, asset]) =>
@@ -488,6 +507,10 @@
             image.addEventListener(
               'load',
               () => {
+                if (generation !== this.assetLoadGeneration) {
+                  resolve();
+                  return;
+                }
                 this.images.set(name, image);
                 this.bitmapCache.clear();
                 resolve();
@@ -506,10 +529,16 @@
               { once: true },
             );
             image.addEventListener('error', resolve, { once: true });
-            image.src = asset.path;
+            image.src = resolveAssetPath(asset.path);
           }),
       );
       return Promise.all(pending);
+    }
+
+    reloadAssets() {
+      this.images.clear();
+      this.bitmapCache.clear();
+      return this.loadAssets();
     }
 
     prepareCanvas() {
@@ -517,7 +546,10 @@
         1,
         Math.round(this.canvas.clientWidth || (this.frame && this.frame.clientWidth) || 640),
       );
-      const cssHeight = Math.max(1, Math.round(this.canvas.clientHeight || 210));
+      const cssHeight = Math.min(
+        MAX_PREVIEW_HEIGHT,
+        Math.max(1, Math.round(this.canvas.clientHeight || 210)),
+      );
       const ratio = Math.max(1, Math.min(3, Number(globalThis.devicePixelRatio) || 1));
       const pixelWidth = Math.round(cssWidth * ratio);
       const pixelHeight = Math.round(cssHeight * ratio);
@@ -532,6 +564,8 @@
 
     clear() {
       this.lastRender = null;
+      if (this.frame) this.frame.style.height = '';
+      if (this.canvas) this.canvas.style.height = '';
       if (!this.canvas) return null;
       const surface = this.prepareCanvas();
       if (this.frame) {
@@ -547,11 +581,28 @@
         config: { ...(config || {}) },
         timeMs: Number(timeMs) || 0,
       };
-      const surface = this.prepareCanvas();
       const colorTemplate = resolveColorTemplate(config && config.colorTemplate);
       const parsed = parseFormattedText(this.lastRender.text, undefined, colorTemplate.color);
+      const fontScale = Number.isFinite(Number(config && config.fontScale))
+        ? Math.max(0.1, Number(config.fontScale))
+        : 1;
+      const naturalLayout = layoutParsedText(parsed, { fontScale });
+      const computedStyle =
+        this.frame && typeof globalThis.getComputedStyle === 'function'
+          ? globalThis.getComputedStyle(this.frame)
+          : null;
+      const minHeight = computedStyle
+        ? Math.max(1, Number.parseFloat(computedStyle.minHeight) || 210)
+        : 210;
+      const desiredHeight = Math.min(
+        MAX_PREVIEW_HEIGHT,
+        Math.max(minHeight, Math.ceil(naturalLayout.height + 20)),
+      );
+      if (this.frame) this.frame.style.height = `${desiredHeight}px`;
+      if (this.canvas) this.canvas.style.height = `${desiredHeight}px`;
+      const surface = this.prepareCanvas();
       const layout = layoutParsedText(parsed, {
-        fontScale: config && config.fontScale,
+        fontScale,
         fitText: Boolean(config && config.fitText),
         maxWidth: Math.max(20, surface.width - 20),
         maxHeight: Math.max(20, surface.height - 20),
@@ -735,6 +786,8 @@
     resources,
     MC_COLORS,
     MAX_RENDER_INPUT_LENGTH,
+    MAX_PREVIEW_HEIGHT,
+    resolveAssetPath,
     resolveColorTemplate,
     parseFormattedText,
     resolveGlyph,

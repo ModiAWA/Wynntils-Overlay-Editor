@@ -1,6 +1,6 @@
 {
   "name": "wynntils-overlay-editor",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Offline browser-based editor and previewer for Wynntils Overlay Info Boxes",
   "license": "MIT",
   "private": true,

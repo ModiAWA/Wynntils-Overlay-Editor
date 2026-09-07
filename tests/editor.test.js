@@ -84,6 +84,11 @@ test('extracted editor modules expose narrow, dependency-free contracts', () => 
   assert.equal(details.names[0], 'fps');
   assert.equal(details.warnings.length, 1);
   assert.equal(details.warnings[0].code, 'simulation-error');
+  const truncated = PreviewController.warningDetails({
+    warnings: [{ code: 'output-limit', functionName: 'Content', start: 0, end: 4096 }],
+  });
+  assert.equal(truncated.outputLimited, true);
+  assert.equal(truncated.names.length, 0);
   const browser = FunctionBrowser.create({
     search: (query, limit) => [query, limit],
     categories: (lang) => [lang],
@@ -1414,6 +1419,59 @@ test('template simulation and Canvas enforce a shared preview text budget', () =
   );
 });
 
+test('Canvas normalizes host asset bases and caps preview height', () => {
+  SandboxContext.WynntilsOverlayEditorConfig = { assetBase: '/overlay' };
+  assert.equal(
+    Canvas.resolveAssetPath('assets/fonts/five.png'),
+    'http://localhost/overlay/assets/fonts/five.png',
+  );
+  SandboxContext.WynntilsOverlayEditorConfig.assetBase = 'https://cdn.example/overlay';
+  assert.equal(
+    Canvas.resolveAssetPath('assets/fonts/five.png'),
+    'https://cdn.example/overlay/assets/fonts/five.png',
+  );
+  delete SandboxContext.WynntilsOverlayEditorConfig;
+
+  const context = {
+    setTransform() {},
+    clearRect() {},
+    save() {},
+    restore() {},
+    translate() {},
+    scale() {},
+    fillRect() {},
+    fillText() {},
+  };
+  const frame = {
+    style: {},
+    classList: { toggle() {}, remove() {} },
+    closest() {
+      return null;
+    },
+  };
+  const canvas = {
+    clientWidth: 640,
+    clientHeight: 210,
+    style: {},
+    width: 640,
+    height: 210,
+    closest() {
+      return frame;
+    },
+    getContext() {
+      return context;
+    },
+  };
+  const renderer = new Canvas.MinecraftCanvasRenderer(canvas);
+  renderer.render(`A${'\n'.repeat(4095)}`, { fontScale: 100 });
+  assert.equal(frame.style.height, `${Canvas.MAX_PREVIEW_HEIGHT}px`);
+  assert.equal(canvas.style.height, `${Canvas.MAX_PREVIEW_HEIGHT}px`);
+
+  canvas.clientHeight = Canvas.MAX_PREVIEW_HEIGHT * 2;
+  renderer.prepareCanvas();
+  assert.equal(canvas.height, Canvas.MAX_PREVIEW_HEIGHT);
+});
+
 test('template simulator never constructs a RegExp from user input', () => {
   vm.runInContext(
     `
@@ -1785,6 +1843,7 @@ test('static entry point is offline-safe and loads translation data in order', (
   }
   const playwrightConfig = fs.readFileSync(path.join(ROOT, 'playwright.config.js'), 'utf8');
   assert.match(playwrightConfig, /WYNNTILS_EDITOR_PORT/);
+  assert.match(html, /<title>Wynntils Overlay Editor<\/title>/);
   assert.doesNotMatch(html, /(?:src|href)=["']https?:\/\//);
   assert.match(html, /functions\.generated\.js\?v=4\.2\.8/);
   assert.match(functionsSource, /Generated only from https:\/\/github\.com\/Wynntils\/Wynntils/);
@@ -1821,15 +1880,15 @@ test('static entry point is offline-safe and loads translation data in order', (
   assert.match(html, /simulation-profile\.js\?v=5/);
   assert.match(html, /template-simulator\.js\?v=7/);
   assert.match(html, /draft-store\.js\?v=3/);
-  assert.match(html, /canvas-renderer\.js\?v=7/);
+  assert.match(html, /canvas-renderer\.js\?v=8/);
   assert.match(html, /function-catalog\.js\?v=2/);
   assert.match(html, /editor-formatting\.js\?v=3/);
-  assert.match(html, /editor-core\.js\?v=24/);
-  assert.match(html, /preview-controller\.js\?v=2/);
+  assert.match(html, /editor-core\.js\?v=25/);
+  assert.match(html, /preview-controller\.js\?v=3/);
   assert.match(html, /function-browser\.js\?v=1/);
   assert.match(html, /ai-controller\.js\?v=1/);
-  assert.match(html, /styles\.css\?v=21/);
-  assert.match(html, /app\.js\?v=23/);
+  assert.match(html, /styles\.css\?v=22/);
+  assert.match(html, /app\.js\?v=24/);
   assert.match(html, /<dialog[^>]+id="aiAssistantDialog"/);
   assert.match(html, /id="aiEndpointInput"[\s\S]*id="aiModelInput"[\s\S]*id="aiApiKeyInput"/);
   assert.match(
@@ -1848,7 +1907,14 @@ test('static entry point is offline-safe and loads translation data in order', (
     html,
     /guideTitle|guideOutput|generateGuideButton|copyGuideButton|downloadGuideButton/,
   );
-  assert.match(app, /state\.lang = state\.lang === 'zh' \? 'en' : 'zh'/);
+  assert.match(app, /window\.WynntilsOverlayEditor = Object\.freeze/);
+  assert.match(app, /function getLanguage\(\)/);
+  assert.match(app, /function setLanguage\(language\)/);
+  assert.match(app, /function toggleLanguage\(\)/);
+  assert.match(app, /function refresh\(\)/);
+  assert.match(html, /id="wynntils-overlay-editor"/);
+  assert.match(html, /data-editor-language-control/);
+  assert.match(html, /data-editor-theme-control/);
   assert.match(app, /Missing required modules/);
   assert.match(html, /id="startupError"[^>]+role="alert"/);
   assert.match(app, /previewController\.render\(/);
@@ -1902,9 +1968,10 @@ test('static entry point is offline-safe and loads translation data in order', (
   );
   assert.match(css, /\.ai-model-fetch[^{]*\{[^}]*width:\s*96px/);
   assert.match(css, /\.ai-key-toggle[^{]*\{[^}]*width:\s*96px/);
+  assert.match(css, /\.ai-proposal[^{]*\{[^}]*border-top:\s*1px solid var\(--woe-accent-border\)/s);
   assert.match(
     css,
-    /\.toggle-row input:focus-visible \+ \.toggle[^{]*\{[^}]*outline:\s*2px solid var\(--cyan\)/,
+    /\.toggle-row input:focus-visible \+ \.toggle[^{]*\{[^}]*outline:\s*2px solid var\(--woe-accent\)/,
   );
   const aiSource = fs.readFileSync(path.join(ROOT, 'js/ai-assistant.js'), 'utf8');
   assert.doesNotMatch(aiSource, /localStorage|sessionStorage/);
@@ -1981,21 +2048,74 @@ test('independent repository ignores local dependency and test artifacts', () =>
   assert.match(ignore, /^node_modules\/$/m);
 });
 
-test('buildFunctionCategories groups functions by type and semantic prefix', () => {
+test('buildFunctionCategories groups functions by return type and semantic prefix', () => {
+  const expectedType = new Map([
+    ['numeric', new Set(['Float', 'Double', 'Integer', 'Long', 'Number', 'RangedValue'])],
+    ['boolean', new Set(['Boolean'])],
+    ['string', new Set(['String'])],
+    ['capped', new Set(['CappedValue'])],
+    ['time', new Set(['Time'])],
+    ['location', new Set(['Location'])],
+    ['color', new Set(['CustomColor'])],
+    ['styled', new Set(['StyledText'])],
+    ['named', new Set(['NamedValue'])],
+    ['other', new Set(['Object'])],
+  ]);
+  const semanticPredicate = {
+    dry: (name) => name.startsWith('dry_'),
+    current: (name) => name.startsWith('current_'),
+    cappedSem: (name) => name.startsWith('capped_') || name.startsWith('cap_'),
+    format: (name) => name.startsWith('format_') || name === 'format',
+    lootrun: (name) => name.startsWith('lootrun_'),
+  };
+  const isSorted = (list) =>
+    list.every((entry, index) => index === 0 || list[index - 1].n.localeCompare(entry.n) <= 0);
+
   const cats = Core.buildFunctionCategories('zh');
-  const labels = cats.map((c) => c.label);
-  // 至少包含类型分类和语义分类
-  assert.ok(cats.length >= 4, 'should have multiple categories');
-  // 每个函数属于某个分组且排序
-  for (const c of cats) {
-    assert.ok(Array.isArray(c.functions) && c.functions.length >= 0);
-    for (const fn of c.functions) {
-      assert.ok(typeof fn === 'string' || typeof fn === 'object');
+  const typeGroups = cats.filter((category) => category.kind === 'type');
+  const semanticGroups = cats.filter((category) => category.kind === 'semantic');
+
+  assert.ok(typeGroups.length >= expectedType.size, 'missing type categories');
+  assert.ok(
+    semanticGroups.length >= Object.keys(semanticPredicate).length,
+    'missing semantic categories',
+  );
+
+  const typeSeen = new Set();
+  for (const group of typeGroups) {
+    assert.ok(expectedType.has(group.id), `unexpected type category ${group.id}`);
+    assert.ok(typeof group.label === 'string' && group.label.length > 0, `${group.id} label`);
+    assert.ok(Array.isArray(group.functions) && group.functions.length > 0, `${group.id} empty`);
+    for (const entry of group.functions) {
+      assert.ok(
+        expectedType.get(group.id).has(entry.r),
+        `${entry.n}(${entry.r}) landed in wrong group ${group.id}`,
+      );
+      typeSeen.add(entry.n);
     }
+    assert.ok(isSorted(group.functions), `${group.id} not sorted by name`);
   }
-  // 中文标签能在 I18N 找到
-  for (const c of cats) {
-    assert.ok(typeof c.label === 'string' && c.label.length > 0, `label missing for ${c.id}`);
+
+  // Type categories must partition the catalog: every function exactly once.
+  assert.equal(typeSeen.size, Core.functions.length);
+  assert.equal(
+    typeGroups.reduce((count, group) => count + group.functions.length, 0),
+    Core.functions.length,
+  );
+
+  for (const group of semanticGroups) {
+    assert.ok(
+      Object.prototype.hasOwnProperty.call(semanticPredicate, group.id),
+      `unexpected semantic group ${group.id}`,
+    );
+    assert.ok(Array.isArray(group.functions) && group.functions.length > 0, `${group.id} empty`);
+    for (const entry of group.functions) {
+      assert.ok(
+        semanticPredicate[group.id](entry.n),
+        `${entry.n} in wrong semantic group ${group.id}`,
+      );
+    }
+    assert.ok(isSorted(group.functions), `${group.id} not sorted by name`);
   }
 });
 
@@ -2007,11 +2127,21 @@ test('buildFunctionCategories covers every bundled function at least once', () =
   assert.equal(missing.length, 0, `uncovered functions: ${missing.map((e) => e.n).join(', ')}`);
 });
 
-test('formatContent beautifies nested template without breaking equivalence', () => {
-  const input = '{concat(a;b;c)}';
-  const out = Core.formatContent(input);
-  assert.ok(typeof out === 'string' && out.length > 0);
-  // 不破坏普通文本
+test('formatContent reformats multi-argument expressions without breaking equivalence', () => {
+  const strip = (value) => value.replace(/\s+/g, '');
+  const beautified = [
+    '{concat("a";"b";"c")}',
+    '{from_rgb(1;2;3)}',
+    '{divide(adavg(2);1000):2}',
+    '{if_str(gte(money;4096);concat("&7";str(le);"&7\\L ");"")}',
+  ];
+  for (const input of beautified) {
+    const output = Core.formatContent(input);
+    assert.notEqual(output, input, `${input} should be reformatted`);
+    assert.equal(strip(output), strip(input), `not logic-equivalent: ${input} -> ${output}`);
+  }
+  // Single-argument calls and plain text are left untouched.
+  assert.equal(Core.formatContent('{fps:0}'), '{fps:0}');
   const plain = 'hello &a{world}\\nworld';
   assert.equal(Core.formatContent(plain), plain);
 });
