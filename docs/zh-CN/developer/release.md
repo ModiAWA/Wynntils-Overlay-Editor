@@ -2,7 +2,7 @@
 
 [开发文档入口](README.md) · [English](../../en-US/developer/release.md) · [架构说明](architecture.md)
 
-本项目是一个静态网页工具，不发布 npm 包。版本号以 package.json 的 version 字段为准，Git 标签必须使用 vMAJOR.MINOR.PATCH 格式，例如 v0.1.0。
+本项目是静态网页工具，不以 npm 包形式发布。版本号以 package.json 的 version 字段为准，Git 标签必须使用 vMAJOR.MINOR.PATCH 格式，例如 v0.1.0。
 
 ## 标准发版流程
 
@@ -13,12 +13,17 @@
 pnpm format
 pnpm check
 pnpm test
-pnpm check:wynntils-functions
-pnpm check:wynntils-resources
 git diff --check
 ```
 
-3. 合并 Pull Request 到 main，并确认合并后的 package.json version。
+上游函数和资源快照检查由 CI 单独执行，不属于日常本地命令：
+
+```bash
+node scripts/sync-functions.mjs --check
+node scripts/sync-resources.mjs --check
+```
+
+3. 合并 Pull Request 到 main，并确认合并后 `package.json` 中的 `version` 字段。
 4. 创建带注释的版本标签并推送：
 
 ```bash
@@ -32,7 +37,7 @@ GitHub Release 的说明由 GitHub 根据合并的提交自动生成，无需手
 
 ## 手动重试
 
-如果标签已经存在但工作流需要重跑，可在 GitHub Actions 中选择 Release → Run workflow，输入已有的版本标签。手动运行只应使用已经推送的标签；工作流会重新验证标签和版本，若 Release 已存在则覆盖同名源代码 ZIP。
+如果标签已经存在但工作流需要重新运行，可在 GitHub Actions 中选择 Release → Run workflow，输入已有的版本标签。手动运行时请使用已推送的标签；工作流会重新验证标签和版本，若 Release 已存在则覆盖同名源代码 ZIP。
 
 ## 版本规则
 

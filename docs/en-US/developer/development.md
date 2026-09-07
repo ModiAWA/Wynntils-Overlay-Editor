@@ -5,7 +5,7 @@
 ## Environment
 
 - Node.js 22
-- pnpm 11, following the repository's lockfile policy
+- pnpm 11, as pinned by the repository lockfile
 - Chromium for browser regression tests
 
 Install dependencies:
@@ -15,7 +15,7 @@ pnpm install
 pnpm exec playwright install chromium
 ```
 
-The editor does not need node_modules at runtime; dependencies serve development-time formatting, synchronization scripts, and automated tests.
+The editor does not need node_modules at runtime; dependencies are used for development-time formatting, synchronization scripts, and automated tests.
 
 ## Common commands
 
@@ -26,24 +26,14 @@ pnpm format
 # Formatting and JavaScript syntax checks
 pnpm check
 
-# Node.js unit tests
-pnpm test:frontend
-
-# Chromium browser tests
-pnpm test:wynntils-browser
-
-# Full test suite
+# Unit tests and Chromium browser tests
 pnpm test
-
-# Snapshot checks
-pnpm check:wynntils-functions
-pnpm check:wynntils-resources
 
 # Whitespace check
 git diff --check
 ```
 
-Snapshot checks access GitHub. Set GITHUB_TOKEN to improve API rate limits, but never write the token to files, logs, or commits.
+Upstream snapshot checks are separate from the daily `pnpm check` and `pnpm test` commands and run independently in CI. They access GitHub; set GITHUB_TOKEN to improve API rate limits, but never write the token to files, logs, or commits.
 
 ## Directory boundaries
 
@@ -63,7 +53,7 @@ Snapshot checks access GitHub. Set GITHUB_TOKEN to improve API rate limits, but 
 - js/functions.generated.js, js/functions.zh.js, js/resources.generated.js: generated snapshots; do not edit manually.
 - tests/editor.test.js: Node.js unit and contract tests.
 - tests/browser/editor.spec.js: headless Chromium regression tests.
-- scripts/sync-functions.mjs, scripts/sync-resources.mjs, scripts/check-js.mjs: function/font resource synchronization and JavaScript syntax checks.
+- scripts/sync-functions.mjs, scripts/sync-resources.mjs, scripts/sync-cache-versions.mjs, scripts/check-js.mjs: function/font synchronization, cache-version maintenance, and JavaScript syntax checks.
 - tests/browser/static-server.mjs: local static server used by the browser regression tests.
 
 Browsers load ordinary scripts in a fixed order without a bundler. When adding a module, update the loading order and startup check in index.html, the syntax-check script, and the tests.
@@ -82,8 +72,6 @@ Browsers load ordinary scripts in a fixed order without a bundler. When adding a
 - pnpm format
 - pnpm check
 - pnpm test
-- pnpm check:wynntils-functions
-- pnpm check:wynntils-resources
 - git diff --check
 - Verify links, commands, and version notes in both README files and their matching language docs.
 

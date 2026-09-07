@@ -10,18 +10,32 @@ The function sync reads FunctionManager, function sources, and English/Chinese t
 
 ```bash
 # Follow the latest stable Release
-pnpm sync:wynntils-functions
+node scripts/sync-functions.mjs
 
 # Pin to a release or commit
 node scripts/sync-functions.mjs --ref v4.2.8
 
 # Check using the ref recorded by the current snapshot
-pnpm check:wynntils-functions
+node scripts/sync-functions.mjs --check
 ```
 
 The check command uses the pinned ref recorded in the generated snapshot by default, so routine CI is reproducible. The sync command follows the latest stable Release unless you provide a ref. Both commands accept an explicit `--ref` override.
 
 The script rejects candidates that lack source, a registration class, a return type, an official English description, or key functions, and blocks anomalous drops in function count. Generated files should be updated by the script rather than edited by hand.
+
+## Browser cache versions
+
+The cache-version script maintains `?v=` parameters for local JavaScript and CSS files in `index.html`:
+
+```bash
+# Update versions for locally changed JS/CSS files
+node scripts/sync-cache-versions.mjs
+
+# Check that versions and file contents are synchronized
+node scripts/sync-cache-versions.mjs --check
+```
+
+The script records JS/CSS content hashes in `cache-versions.json`. Unchanged files keep their versions; changed files with an unchanged numeric version are incremented automatically. Font PNG content hashes are stored in `js/resources.generated.js` and appended to image URLs by the renderer. Upstream synchronization workflows run the relevant scripts after generating snapshots.
 
 ## Font resources
 
@@ -29,16 +43,16 @@ Font synchronization uses the GitHub Contents API to read five.json, banners.jso
 
 ```bash
 # Update resources and manifest
-pnpm sync:wynntils-resources
+node scripts/sync-resources.mjs
 
 # Check the current resource snapshot against its recorded commit
-pnpm check:wynntils-resources
+node scripts/sync-resources.mjs --check
 
 # Pin to a release or commit
 node scripts/sync-resources.mjs --ref v4.2.8
 ```
 
-The script validates the PNG signature, type, and dimensions, capping width and height at 4096, before writing. The generated manifest, the license-notice commit, and PNG files under assets/fonts/ are replaced atomically; any failure rolls back and keeps the previous complete snapshot.
+Before writing, the script validates the PNG signature, type, and dimensions, capping width and height at 4096. The generated manifest, the license-notice commit, and PNG files under assets/fonts/ are replaced atomically; any failure rolls back and keeps the previous complete snapshot.
 
 ## Pull requests and review
 
@@ -51,7 +65,7 @@ They periodically check the official stable version. When data changes and tests
 
 - The upstream ref, commit, and source notice agree.
 - Generated-file counts did not change unexpectedly.
-- pnpm check, snapshot checks, and related tests pass.
+- pnpm check, separate snapshot checks, and related tests pass.
 - No undeclared third-party fonts or files from outside the approved source entered the repository.
 
 Snapshot checks use the GitHub API. CI uses GITHUB_TOKEN; locally you may set the same environment variable to raise rate limits, but never print or commit the token.
