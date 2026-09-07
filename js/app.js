@@ -67,6 +67,17 @@
   let previewVisible = true;
   let previewWarningSignature = '';
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const editorRoot = document.getElementById('wynntils-overlay-editor');
+
+  if (!editorRoot) {
+    const error = document.createElement('div');
+    error.className = 'startup-error';
+    error.setAttribute('role', 'alert');
+    error.textContent = 'Wynntils editor could not start. Missing #wynntils-overlay-editor.';
+    document.body?.append(error);
+    console.error('[wynntils-editor] Missing #wynntils-overlay-editor root container.');
+    return;
+  }
 
   const TITLE_CONTROL_INSERTS = Object.freeze([
     Object.freeze({ labelKey: 'glyphControlStart', value: '\uE010\u2064' }),
@@ -74,8 +85,12 @@
     Object.freeze({ labelKey: 'glyphControlEnd', value: '\u2064\uE011' }),
   ]);
 
-  const $ = (selector) => document.querySelector(selector);
-  const $$ = (selector) => [...document.querySelectorAll(selector)];
+  const $ = (selector) => editorRoot?.querySelector(selector) || null;
+  const $$ = (selector) => [...(editorRoot?.querySelectorAll(selector) || [])];
+  const languageButtons = () =>
+    [...(editorRoot?.querySelectorAll('[data-editor-language-button]') || [])].filter(
+      (button) => button instanceof HTMLElement,
+    );
   const fields = {
     content: $('#contentInput'),
     colorTemplate: $('#colorTemplateInput'),
@@ -119,7 +134,7 @@
   }
 
   function applyLanguage() {
-    document.documentElement.lang = state.lang === 'zh' ? 'zh-CN' : 'en';
+    if (editorRoot) editorRoot.lang = state.lang === 'zh' ? 'zh-CN' : 'en';
     $$('[data-i18n]').forEach((node) => {
       node.textContent = t(node.dataset.i18n);
     });
@@ -129,8 +144,10 @@
     $$('[data-i18n-aria-label]').forEach((node) => {
       node.setAttribute('aria-label', t(node.dataset.i18nAriaLabel));
     });
-    $('#languageButton').textContent = state.lang === 'zh' ? 'EN' : '中';
-    $('#languageButton').setAttribute('aria-label', t('languageLabel'));
+    languageButtons().forEach((button) => {
+      button.textContent = state.lang === 'zh' ? 'EN' : '中';
+      button.setAttribute('aria-label', t('languageLabel'));
+    });
     $('#functionCount').textContent = String(Core.functions.length);
     renderTemplateOptions();
     renderFunctions($('#functionSearch').value);
@@ -275,7 +292,7 @@
       parsedTemplate || Core.parseTemplateSyntax(fields.content.value),
     );
     syncContentHighlightScroll();
-    document.documentElement.classList.add('syntax-highlighting');
+    editorRoot?.classList.add('syntax-highlighting');
   }
 
   function applySelectedContentColor() {
@@ -807,10 +824,13 @@
       : {
           warnings: Array.from(evaluation?.warnings || []),
           names: evaluation?.unsupportedFunctions || [],
+          outputLimited: Array.from(evaluation?.warnings || []).some(
+            (item) => item.code === 'output-limit',
+          ),
           signature: '',
         };
-    const { warnings, names, signature } = details;
-    if (!names.length && !warnings.length) {
+    const { warnings, names, outputLimited, signature } = details;
+    if (!names.length && !warnings.length && !outputLimited) {
       previewWarningSignature = '';
       const status = $('#previewStatus');
       status.hidden = true;
@@ -823,7 +843,14 @@
     const localizedSignature = `${state.lang}:${signature}`;
     status.hidden = false;
     if (localizedSignature !== previewWarningSignature) {
-      status.textContent = t('previewUnsupported', { functions: names.join(', ') });
+      const messages = [];
+      if (outputLimited) {
+        messages.push(t('previewTruncated', { limit: Canvas.MAX_RENDER_INPUT_LENGTH || 4096 }));
+      }
+      if (names.length) {
+        messages.push(t('previewUnsupported', { functions: names.join(', ') }));
+      }
+      status.textContent = messages.join(' ');
     }
     status.hidden = false;
     status.classList.add('is-warning');
@@ -1273,16 +1300,59 @@
       window.clearTimeout(draftSaveTimer);
       setDraftNotice('draftConflict', { canLoad: true, canKeep: true });
     });
-    $('#languageButton').addEventListener('click', () => {
-      state.lang = state.lang === 'zh' ? 'en' : 'zh';
-      applyLanguage();
+    languageButtons().forEach((button) => {
+      button.addEventListener('click', toggleLanguage);
     });
     let resizeFrame = 0;
-    window.addEventListener('resize', () => {
+    const scheduleResizeRender = () => {
       window.cancelAnimationFrame(resizeFrame);
       resizeFrame = window.requestAnimationFrame(renderPreview);
-    });
+    };
+    window.addEventListener('resize', scheduleResizeRender);
+    if ('ResizeObserver' in window && editorRoot) {
+      let observedWidth = editorRoot.getBoundingClientRect().width;
+      const observer = new ResizeObserver(([entry]) => {
+        const width = entry?.contentRect?.width;
+        if (!Number.isFinite(width) || Math.abs(width - observedWidth) < 0.5) return;
+        observedWidth = width;
+        scheduleResizeRender();
+      });
+      observer.observe(editorRoot);
+    }
     applyLanguage();
+    window.WynntilsOverlayEditor = Object.freeze({
+      getLanguage,
+      setLanguage,
+      toggleLanguage,
+      refresh,
+    });
+  }
+
+  function getLanguage() {
+    return state.lang;
+  }
+
+  function setLanguage(language) {
+    if (language !== 'zh' && language !== 'en') return state.lang;
+    if (state.lang !== language) {
+      state.lang = language;
+      applyLanguage();
+    }
+    return state.lang;
+  }
+
+  function toggleLanguage() {
+    state.lang = state.lang === 'zh' ? 'en' : 'zh';
+    applyLanguage();
+    return state.lang;
+  }
+
+  function refresh() {
+    applyLanguage();
+    return Promise.resolve(previewRenderer.reloadAssets?.()).then(() => {
+      renderPreview();
+      return state.lang;
+    });
   }
 
   init();

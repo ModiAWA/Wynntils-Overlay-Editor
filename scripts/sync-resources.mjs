@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { access, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -199,6 +200,7 @@ export function buildResourceData(commit, manifests, dimensions) {
       path: `assets/fonts/${provider.asset}.png`,
       width: size.width,
       height: size.height,
+      ...(size.hash ? { hash: size.hash } : {}),
     };
   }
   return {
@@ -291,7 +293,10 @@ async function loadRemote(commit) {
     return { provider, content, dimensions: pngDimensions(content, provider.sourcePath) };
   });
   const dimensions = Object.fromEntries(
-    loaded.map(({ provider, dimensions: size }) => [provider.asset, size]),
+    loaded.map(({ provider, content, dimensions: size }) => [
+      provider.asset,
+      { ...size, hash: createHash('sha256').update(content).digest('hex').slice(0, 16) },
+    ]),
   );
   const assets = Object.fromEntries(
     loaded.map(({ provider, content }) => [provider.asset, content]),

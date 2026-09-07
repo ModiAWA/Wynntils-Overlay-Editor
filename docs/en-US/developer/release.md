@@ -13,9 +13,14 @@ This project is a static web tool, not an npm package. The version in package.js
 pnpm format
 pnpm check
 pnpm test
-pnpm check:wynntils-functions
-pnpm check:wynntils-resources
 git diff --check
+```
+
+CI runs upstream function and resource snapshot checks separately from the daily local commands:
+
+```bash
+node scripts/sync-functions.mjs --check
+node scripts/sync-resources.mjs --check
 ```
 
 3. Merge the pull request into main and confirm the merged package.json version.
@@ -32,7 +37,7 @@ GitHub generates the release notes automatically from the merged commits, so you
 
 ## Manual retry
 
-If an existing tag needs to be retried, open GitHub Actions, select Release → Run workflow, and enter the existing version tag. Manual runs should use a tag that has already been pushed. The workflow revalidates the tag and package version, and replaces the source ZIP if the Release already exists.
+If an existing tag needs to be retried, open the Actions tab, select Release → Run workflow, and enter the existing version tag. Manual runs should use a tag that has already been pushed. The workflow revalidates the tag and package version, and replaces the source ZIP if the Release already exists.
 
 ## Version rules
 

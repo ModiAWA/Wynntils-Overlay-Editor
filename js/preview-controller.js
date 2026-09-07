@@ -12,11 +12,12 @@
       start: Number.isFinite(item.start) ? item.start : null,
       end: Number.isFinite(item.end) ? item.end : null,
     }));
+    const outputLimited = warnings.some((item) => item.code === 'output-limit');
     const names = Array.from(
       new Set([
         ...(evaluation?.unsupportedFunctions || []),
         ...warnings
-          .filter((item) => item.code !== 'unsupported-function')
+          .filter((item) => !['unsupported-function', 'output-limit'].includes(item.code))
           .map((item) => item.functionName)
           .filter(Boolean),
       ]),
@@ -29,6 +30,7 @@
     return Object.freeze({
       warnings: Object.freeze(warnings),
       names: Object.freeze(names),
+      outputLimited,
       signature,
     });
   }

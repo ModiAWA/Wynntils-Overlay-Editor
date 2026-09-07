@@ -68,19 +68,16 @@ jobs:
         run: pnpm check
 
       - name: Verify Wynntils function snapshot
-        run: pnpm check:wynntils-functions
+        run: node scripts/sync-functions.mjs --check
 
       - name: Verify Wynntils resource snapshot
-        run: pnpm check:wynntils-resources
+        run: node scripts/sync-resources.mjs --check
 
       - name: Check whitespace
         run: git diff --check
 
-      - name: Run unit tests
-        run: pnpm test:frontend
-
-      - name: Run browser tests
-        run: pnpm test:wynntils-browser
+      - name: Run tests
+        run: pnpm test
 
   publish:
     name: Publish GitHub release

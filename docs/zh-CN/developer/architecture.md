@@ -13,7 +13,7 @@
   │    └─ 固定示例状态、类型检查、占位和总长度预算
   └─ preview-controller
        └─ canvas-renderer
-            └─ 格式码、Color Template、字体 provider、控制序列和 glyph
+            └─ 格式码、Color Template、字体加载器、控制序列与字形（glyph）
 ```
 
 页面直接加载普通 JavaScript 文件，不使用 bundler。index.html 负责脚本顺序和必需模块检查；app.js 负责组装控制器，而稳定的编辑器契约保留在 editor-core.js。

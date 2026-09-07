@@ -20,7 +20,7 @@
     const I18N = Object.freeze({
       zh: {
         languageLabel: '切换为英文',
-        pageTitle: 'Wynntils Overlay Studio',
+        pageTitle: 'Wynntils Overlay Editor',
         advancedSettings: '高级设置',
         formTitle: '编辑信息框（Info Box）',
         templateLabel: '选择示例',
@@ -132,6 +132,8 @@
         previewEmpty: '内容为空，预览已清空。',
         previewPaused: '预览已暂停：内容存在语法或配置问题。',
         previewFailed: '预览渲染失败，编辑和草稿保存仍可继续。',
+        previewTruncated:
+          '预览内容超过浏览器模拟上限（{limit} 个字符），仅显示部分内容；实际 Wynntils 配置不受影响。',
         previewUnsupported: '预览包含占位值：{functions}',
         previewColorFallback:
           '动态 Color Template 无法在游戏外求值，预览暂用白色；静态十六进制、from_hex 和 from_rgb 可直接模拟。',
@@ -207,7 +209,7 @@
       },
       en: {
         languageLabel: 'Switch to Chinese',
-        pageTitle: 'Wynntils Overlay Studio',
+        pageTitle: 'Wynntils Overlay Editor',
         advancedSettings: 'Advanced settings',
         formTitle: 'Edit the Info Box',
         templateLabel: 'Choose an example',
@@ -332,6 +334,8 @@
         previewEmpty: 'Content is empty, so the preview has been cleared.',
         previewPaused: 'Preview paused because the content or configuration has an issue.',
         previewFailed: 'Preview rendering failed; editing and draft saving can continue.',
+        previewTruncated:
+          'The preview exceeds the browser simulation limit ({limit} characters), so only part is shown; the actual Wynntils configuration is unaffected.',
         previewUnsupported: 'Preview contains placeholders for: {functions}',
         previewColorFallback:
           'Dynamic Color Templates cannot be evaluated outside the game, so the preview uses white. Static hex, from_hex, and from_rgb colors are simulated.',

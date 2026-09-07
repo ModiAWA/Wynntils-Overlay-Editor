@@ -5,7 +5,7 @@
 ## 环境
 
 - Node.js 22
-- pnpm 11（以仓库锁定的版本策略为准）
+- pnpm 11（以仓库锁定的版本为准）
 - Chromium（浏览器回归测试需要）
 
 安装依赖：
@@ -26,34 +26,24 @@ pnpm format
 # 格式检查和 JavaScript 语法检查
 pnpm check
 
-# Node.js 单元测试
-pnpm test:frontend
-
-# Chromium 浏览器测试
-pnpm test:wynntils-browser
-
-# 完整测试
+# 单元测试和 Chromium 浏览器测试
 pnpm test
-
-# 检查资源快照
-pnpm check:wynntils-functions
-pnpm check:wynntils-resources
 
 # 检查空白字符
 git diff --check
 ```
 
-资源检查需要访问 GitHub。设置 GITHUB_TOKEN 可以提高 API 速率限制，但不要把令牌写入文件、日志或提交。
+上游快照检查不在日常 `pnpm check` 和 `pnpm test` 中；这类检查需要访问 GitHub，由 CI 单独运行同步脚本。设置 GITHUB_TOKEN 可以提高 API 速率限制，但不要把令牌写入文件、日志或提交。
 
 ## 目录边界
 
 - index.html：静态入口、表单和可访问性标记。
 - styles.css：页面布局、响应式样式和主题变量。
-- js/template-parser.js：Wynntils 表达式解析和语法范围。
-- js/editor-core.js：编辑器兼容门面、校验和示例配置。
+- js/template-parser.js：Wynntils 表达式解析与语法高亮/诊断范围。
+- js/editor-core.js：编辑器兼容层、校验和示例配置。
 - js/editor-formatting.js：格式化、格式码扫描、颜色应用和文本插入。
 - js/template-simulator.js：固定示例状态下的安全函数模拟。
-- js/canvas-renderer.js：格式码、字体 provider、控制序列和 glyph 的 Canvas 渲染。
+- js/canvas-renderer.js：格式码、字体加载器、控制序列与字形（glyph）的 Canvas 渲染。
 - js/preview-controller.js：预览状态、警告和渲染调度。
 - js/function-catalog.js：函数索引、别名、分类、搜索和插入示例。
 - js/function-browser.js：函数目录的键盘和 DOM 交互。
@@ -63,7 +53,7 @@ git diff --check
 - js/functions.generated.js、js/functions.zh.js、js/resources.generated.js：由同步脚本生成的快照，不要手工编辑。
 - tests/editor.test.js：Node.js 单元和契约测试。
 - tests/browser/editor.spec.js：Chromium 无头浏览器回归测试。
-- scripts/sync-functions.mjs、scripts/sync-resources.mjs、scripts/check-js.mjs：函数/字体资源同步与 JavaScript 语法检查。
+- scripts/sync-functions.mjs、scripts/sync-resources.mjs、scripts/sync-cache-versions.mjs、scripts/check-js.mjs：函数/字体资源同步、缓存版本维护与 JavaScript 语法检查。
 - tests/browser/static-server.mjs：浏览器回归测试使用的本地静态服务器。
 
 浏览器按普通脚本顺序加载模块，不依赖打包器。新增模块时必须同步 index.html 的加载顺序、启动检查、语法检查脚本和测试。
@@ -82,8 +72,6 @@ git diff --check
 - pnpm format
 - pnpm check
 - pnpm test
-- pnpm check:wynntils-functions
-- pnpm check:wynntils-resources
 - git diff --check
 - 检查 README 和对应语言文档中的链接、命令和版本说明。
 
