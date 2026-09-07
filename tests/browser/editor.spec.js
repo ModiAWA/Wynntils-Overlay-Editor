@@ -195,9 +195,11 @@ test('host theme variables propagate through editor surfaces and text', async ({
 
 test('assetBase reroutes bundled font requests for host deployments', async ({ page }) => {
   const assetRequests = [];
-  await page.route('**/overlay/assets/fonts/*.png', (route) =>
-    route.fulfill({ path: path.join(__dirname, '../../assets/fonts/five.png') }),
-  );
+  const fontAssetDirectory = path.join(__dirname, '../../assets/fonts');
+  await page.route('**/overlay/assets/fonts/*.png*', (route) => {
+    const filename = path.basename(new URL(route.request().url()).pathname);
+    return route.fulfill({ path: path.join(fontAssetDirectory, filename) });
+  });
   page.on('request', (request) => {
     if (request.url().includes('/overlay/assets/fonts/')) assetRequests.push(request.url());
   });
