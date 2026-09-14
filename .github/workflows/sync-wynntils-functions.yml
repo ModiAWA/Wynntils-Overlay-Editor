@@ -38,6 +38,14 @@ jobs:
         with:
           node-version: 22
 
+      - name: Verify committed snapshot and editor
+        env:
+          WYNNTILS_REF: ''
+        run: |
+          node scripts/sync-functions.mjs --check
+          node --test tests/editor.test.js
+          git diff --check
+
       - name: Generate from Wynntils official sources
         run: node scripts/sync-functions.mjs
 
@@ -48,7 +56,6 @@ jobs:
         run: |
           node --check js/functions.generated.js
           node --check js/functions.zh.js
-          node --test tests/editor.test.js
           git diff --check
 
       - name: Detect changes

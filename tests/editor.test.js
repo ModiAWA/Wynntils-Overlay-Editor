@@ -247,11 +247,14 @@ test('official Wynntils resource parser preserves providers and rejects unsafe i
   );
   assert.equal(five[0].sourcePath.endsWith('/five.png'), true);
   assert.equal(banners[0].codepoint, 0xe008);
-  assert.equal(
-    Sync.currentCommit(fs.readFileSync(path.join(ROOT, 'js/resources.generated.js'), 'utf8')),
-    '0a03ed7ae17757304077134c5e60299877941e62',
+  assert.equal(Sync.currentCommit(`commit: '${'A'.repeat(40)}'`), 'a'.repeat(40));
+  assert.throws(() => Sync.currentCommit('commit: nope'), /pinned resource commit/);
+  const generatedCommit = Sync.currentCommit(
+    fs.readFileSync(path.join(ROOT, 'js/resources.generated.js'), 'utf8'),
   );
+  assert.match(generatedCommit, /^[0-9a-f]{40}$/);
   const notice = fs.readFileSync(path.join(ROOT, 'THIRD_PARTY_NOTICES.md'), 'utf8');
+  assert.match(notice, new RegExp(`上游 commit：\`${generatedCommit}\``));
   assert.match(Sync.updateNotice(notice, 'b'.repeat(40)), /上游 commit：`b{40}`/);
   const data = Sync.buildResourceData('a'.repeat(40), [five, banners], {
     five: { width: 3, height: 14 },
