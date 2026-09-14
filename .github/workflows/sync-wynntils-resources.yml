@@ -11,6 +11,7 @@ on:
         type: string
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
 
@@ -95,3 +96,15 @@ jobs:
               --title "chore(data): sync official Wynntils resources" \
               --body "Refreshes the offline Wynntils font manifests and PNG assets through the GitHub Contents API. Generated data and editor tests passed before this PR was opened."
           fi
+
+      - name: Trigger CI on the generated branch
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Events caused by GITHUB_TOKEN do not start workflow runs, so a PR opened by
+          # this workflow would have no check runs and could never satisfy the required
+          # "Editor / Node.js 22" status check. workflow_dispatch is explicitly exempt
+          # from that restriction, so dispatch CI for the generated branch ourselves.
+          gh workflow run ci.yml --ref "automation/wynntils-resources"
