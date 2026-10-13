@@ -12,7 +12,7 @@
   root.WYNNTILS_FONT_RESOURCES = freeze({
     source: {
       repository: 'https://github.com/Wynntils/Wynntils',
-      commit: '0a03ed7ae17757304077134c5e60299877941e62',
+      commit: '598aa4ae3b0756ec23a4cea51ac2b1a32f5e15a0',
       license: 'LGPL-3.0',
     },
     assets: {
