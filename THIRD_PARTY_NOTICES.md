@@ -21,7 +21,7 @@
 
 本工具内置 [Wynntils/Wynntils](https://github.com/Wynntils/Wynntils) 的位图字体资源，用于完全离线的 Overlay 预览。
 
-- 上游 commit：`0a03ed7ae17757304077134c5e60299877941e62`
+- 上游 commit：`598aa4ae3b0756ec23a4cea51ac2b1a32f5e15a0`
 - 许可证：GNU Lesser General Public License v3.0
 - 许可证原文：`LICENSES/Wynntils-LGPL-3.0.txt`
 - 版权所有：Wynntils contributors
