@@ -9,6 +9,11 @@ on:
         description: Optional Wynntils release tag or commit
         required: false
         type: string
+      force:
+        description: Force re-pinning provenance even when upstream content is unchanged
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   actions: write
@@ -27,6 +32,7 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       WYNNTILS_RESOURCES_REF: ${{ inputs.ref || '' }}
+      WYNNTILS_FORCE: ${{ inputs.force == true && '1' || '' }}
 
     steps:
       - name: Check out repository

@@ -23,6 +23,7 @@ function parseCli(argv) {
   const options = {
     ref: process.env.WYNNTILS_RESOURCES_REF || '',
     check: false,
+    force: process.env.WYNNTILS_FORCE === '1',
     output: DEFAULT_OUTPUT,
     notice: DEFAULT_NOTICE,
     assets: DEFAULT_ASSETS,
@@ -30,6 +31,7 @@ function parseCli(argv) {
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
     if (value === '--check') options.check = true;
+    else if (value === '--force') options.force = true;
     else if (['--ref', '--output', '--notice', '--assets'].includes(value)) {
       const next = argv[index + 1];
       if (!next) throw new Error(`${value} requires a value.`);
@@ -248,10 +250,43 @@ async function formatGenerated(source, filepath) {
   });
 }
 
+const NOTICE_COMMIT_PATTERN = /(## Wynntils 字体资源[\s\S]*?- 上游 commit：`)([0-9a-f]{40})(`)/i;
+// Only the pinned upstream commit is provenance; every other byte of the generated artifacts
+// stays comparable, so an unrelated 40-hex value would still count as a substantive change.
+const PROVENANCE_PATTERNS = [
+  /(["']?commit["']?\s*:\s*["'])[0-9a-f]{40}(["'])/gi,
+  /(- 上游 commit：`)[0-9a-f]{40}(`)/g,
+];
+
 export function updateNotice(source, commit) {
-  const pattern = /(## Wynntils 字体资源[\s\S]*?- 上游 commit：`)([0-9a-f]{40})(`)/i;
-  if (!pattern.test(source)) throw new Error('Could not find the Wynntils font notice commit.');
-  return source.replace(pattern, `$1${commit}$3`);
+  if (!NOTICE_COMMIT_PATTERN.test(source))
+    throw new Error('Could not find the Wynntils font notice commit.');
+  return source.replace(NOTICE_COMMIT_PATTERN, `$1${commit}$3`);
+}
+
+export function noticeCommit(source) {
+  const match = NOTICE_COMMIT_PATTERN.exec(String(source || ''));
+  return match ? match[2].toLowerCase() : null;
+}
+
+export function stripProvenance(source) {
+  let result = String(source || '');
+  for (const pattern of PROVENANCE_PATTERNS) result = result.replace(pattern, '$1<commit>$2');
+  return result;
+}
+
+export function hasSubstantiveChange({
+  previousSource,
+  nextSource,
+  previousNotice,
+  nextNotice,
+  assetChanges = 0,
+}) {
+  return (
+    assetChanges > 0 ||
+    stripProvenance(previousSource) !== stripProvenance(nextSource) ||
+    stripProvenance(previousNotice) !== stripProvenance(nextNotice)
+  );
 }
 
 export function currentCommit(source) {
@@ -260,7 +295,7 @@ export function currentCommit(source) {
   return match[1].toLowerCase();
 }
 
-async function resolveCommit(requestedRef, check, existingSource) {
+export async function resolveCommit(requestedRef, check, existingSource) {
   const ref = requestedRef || (check ? currentCommit(existingSource) : '');
   let resolvedRef = ref;
   if (!resolvedRef) {
@@ -279,7 +314,7 @@ async function resolveCommit(requestedRef, check, existingSource) {
   return { ref: resolvedRef, commit };
 }
 
-async function loadRemote(commit) {
+export async function loadRemote(commit) {
   const [fiveSource, bannerSource] = await Promise.all([
     readContentsFile(FIVE_MANIFEST, commit),
     readContentsFile(BANNERS_MANIFEST, commit),
@@ -386,24 +421,50 @@ export async function writeAtomicGroup(updates, operationOverrides = {}) {
 export async function synchronize(options = parseCli([])) {
   const existingSource = (await readOptional(options.output)) || '';
   const currentNotice = (await readOptional(options.notice)) || '';
-  const resolved = await resolveCommit(options.ref, options.check, existingSource);
-  const remote = await loadRemote(resolved.commit);
+  const resolve = options.resolveCommit || resolveCommit;
+  const load = options.loadRemote || loadRemote;
+  const resolved = await resolve(options.ref, options.check, existingSource);
+  const remote = await load(resolved.commit);
   const generated = await formatGenerated(renderResources(remote.data), options.output);
   const notice = updateNotice(currentNotice, resolved.commit);
   const desiredNames = new Set(Object.keys(remote.data.assets));
   const updates = [];
+  let assetChanges = 0;
   if (generated !== existingSource) updates.push({ target: options.output, content: generated });
   if (notice !== currentNotice) updates.push({ target: options.notice, content: notice });
   for (const [name, content] of Object.entries(remote.assets)) {
     const target = path.join(options.assets, `${name}.png`);
     const current = await readOptional(target, null);
-    if (!current || !Buffer.from(current).equals(content)) updates.push({ target, content });
+    if (!current || !Buffer.from(current).equals(content)) {
+      updates.push({ target, content });
+      assetChanges += 1;
+    }
   }
   for (const name of await existingAssetNames(options.assets)) {
-    if (!desiredNames.has(name))
+    if (!desiredNames.has(name)) {
       updates.push({ target: path.join(options.assets, `${name}.png`), remove: true });
+      assetChanges += 1;
+    }
   }
-  const changed = updates.length > 0;
+  const substantive = hasSubstantiveChange({
+    previousSource: existingSource,
+    nextSource: generated,
+    previousNotice: currentNotice,
+    nextNotice: notice,
+    assetChanges,
+  });
+  let pinnedCommit = null;
+  try {
+    pinnedCommit = currentCommit(existingSource);
+  } catch (_error) {
+    pinnedCommit = null;
+  }
+  // The snapshot is self-consistent only when the notice pins the same commit as the generated
+  // manifest. Anything else (hand edits, merge leftovers) must fall through to the repair path.
+  const snapshotConsistent = pinnedCommit !== null && noticeCommit(currentNotice) === pinnedCommit;
+  const skipProvenanceOnly =
+    !options.check && options.force !== true && snapshotConsistent && !substantive;
+  const changed = options.check ? updates.length > 0 : !skipProvenanceOnly && updates.length > 0;
   if (options.check) {
     if (changed)
       throw new Error('The Wynntils resource snapshot is stale. Run the resource sync command.');
@@ -413,11 +474,22 @@ export async function synchronize(options = parseCli([])) {
     commit: resolved.commit,
     ref: resolved.ref,
     assets: Object.keys(remote.assets).length,
+    substantive,
+    pinnedCommit,
+    provenanceChanged: pinnedCommit !== resolved.commit,
+    snapshotConsistent,
   };
 }
 
 async function main() {
   const result = await synchronize(parseCli(process.argv.slice(2)));
+  if (!result.changed && result.provenanceChanged) {
+    const pinned = result.pinnedCommit ? result.pinnedCommit.slice(0, 12) : 'unknown';
+    process.stdout.write(
+      `Wynntils resources current: ${result.assets} assets, upstream ${result.ref} @ ${result.commit.slice(0, 12)} has an identical resource payload; snapshot stays pinned to ${pinned}.\n`,
+    );
+    return;
+  }
   process.stdout.write(
     `Wynntils resources ${result.changed ? 'updated' : 'current'}: ${result.assets} assets, ${result.ref} @ ${result.commit.slice(0, 12)}\n`,
   );

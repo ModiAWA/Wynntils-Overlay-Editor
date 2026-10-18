@@ -9,6 +9,11 @@ on:
         description: Optional Wynntils release tag or commit
         required: false
         type: string
+      force:
+        description: Force re-pinning provenance even when upstream content is unchanged
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   actions: write
@@ -27,6 +32,7 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       WYNNTILS_REF: ${{ inputs.ref || '' }}
+      WYNNTILS_FORCE: ${{ inputs.force == true && '1' || '' }}
 
     steps:
       - name: Check out repository
@@ -39,11 +45,8 @@ jobs:
         with:
           node-version: 22
 
-      - name: Verify committed snapshot and editor
-        env:
-          WYNNTILS_REF: ''
+      - name: Verify the editor and the working tree
         run: |
-          node scripts/sync-functions.mjs --check
           node --test tests/editor.test.js
           git diff --check
 
@@ -68,6 +71,16 @@ jobs:
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
+
+      # Running the strict check before generating would abort the job in exactly the states the
+      # sync can repair (moved tag, hand-edited provenance). Verify the committed tree here
+      # instead: when the sync wrote nothing this is the same strict check as before, and a
+      # repair is verified by the CI run that the last step dispatches on the generated branch.
+      - name: Verify an unchanged snapshot is still canonical
+        if: steps.changes.outputs.changed == 'false'
+        env:
+          WYNNTILS_REF: ''
+        run: node scripts/sync-functions.mjs --check
 
       - name: Open or update pull request
         if: steps.changes.outputs.changed == 'true'
