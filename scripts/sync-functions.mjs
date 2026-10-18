@@ -26,11 +26,13 @@ function parseCli(argv) {
     output: DEFAULT_OUTPUT,
     index: DEFAULT_INDEX,
     check: false,
+    force: process.env.WYNNTILS_FORCE === '1',
     allowLargeChange: process.env.ALLOW_LARGE_WYNNTILS_CHANGE === '1',
   };
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
     if (value === '--check') options.check = true;
+    else if (value === '--force') options.force = true;
     else if (value === '--allow-large-change') options.allowLargeChange = true;
     else if (['--ref', '--source-dir', '--output', '--index'].includes(value)) {
       const next = argv[index + 1];
@@ -71,7 +73,9 @@ async function fetchResponse(url, options = {}) {
       });
       if (!response.ok) {
         const detail = (await response.text()).slice(0, 400);
-        throw new Error(`HTTP ${response.status} from ${url}: ${detail}`);
+        const error = new Error(`HTTP ${response.status} from ${url}: ${detail}`);
+        error.status = response.status;
+        throw error;
       }
       return response;
     } catch (error) {
@@ -101,6 +105,18 @@ function rawUrl(commit, sourcePath) {
   return `https://raw.githubusercontent.com/${REPOSITORY}/${commit}/${encodedPath}`;
 }
 
+async function resolveRemoteProvenance(ref) {
+  const commitData = await fetchJson(
+    `https://api.github.com/repos/${REPOSITORY}/commits/${encodeURIComponent(ref)}`,
+  );
+  const commit = String(commitData.sha || '')
+    .trim()
+    .toLowerCase();
+  const commitDate = String(commitData.commit?.committer?.date || '').trim();
+  if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error(`Could not resolve Wynntils ref ${ref}.`);
+  return { commit, commitDate };
+}
+
 async function createRemoteSource(requestedRef) {
   let ref = requestedRef;
   if (!ref) {
@@ -108,12 +124,7 @@ async function createRemoteSource(requestedRef) {
     ref = String(release.tag_name || '').trim();
     if (!ref) throw new Error('The latest Wynntils release did not include a tag name.');
   }
-  const commitData = await fetchJson(
-    `https://api.github.com/repos/${REPOSITORY}/commits/${encodeURIComponent(ref)}`,
-  );
-  const commit = String(commitData.sha || '').trim();
-  const commitDate = String(commitData.commit?.committer?.date || '').trim();
-  if (!/^[0-9a-f]{40}$/i.test(commit)) throw new Error(`Could not resolve Wynntils ref ${ref}.`);
+  const { commit, commitDate } = await resolveRemoteProvenance(ref);
 
   const tree = await fetchJson(
     `https://api.github.com/repos/${REPOSITORY}/git/trees/${commit}?recursive=1`,
@@ -392,6 +403,63 @@ function parseExistingMetadata(source) {
   }
 }
 
+export function parseFunctionPayload(source) {
+  const serialized = String(source || '').match(
+    /window\.WYNNTILS_FUNCTIONS\s*=\s*(\[[^\r\n]*\])\s*;/,
+  )?.[1];
+  if (!serialized) return null;
+  try {
+    const payload = JSON.parse(serialized);
+    return Array.isArray(payload) ? payload : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+export function isPayloadEquivalent(functions, existingSource) {
+  const existing = parseFunctionPayload(existingSource);
+  if (!existing) return false;
+  return JSON.stringify(existing) === JSON.stringify(functions);
+}
+
+function parsePinnedProvenance(source) {
+  const metadata = parseExistingMetadata(source);
+  const ref = String(metadata?.ref || '').trim();
+  const commit = String(metadata?.commit || '')
+    .trim()
+    .toLowerCase();
+  const commitDate = String(metadata?.commitDate || '').trim();
+  return { ref, commit, commitDate, healthy: Boolean(ref) && /^[0-9a-f]{40}$/.test(commit) };
+}
+
+function isMissingRefError(error) {
+  const status = error?.status ?? error?.cause?.status;
+  return status === 404 || status === 410 || /HTTP (?:404|410)\b/.test(error?.message || '');
+}
+
+// `--check` re-renders the committed snapshot from the ref recorded in its metadata, so a pin that
+// no longer resolves to the commit and date it records would leave verification red forever: the
+// content gate resolves a newer release, sees identical content, and keeps skipping. Asking about
+// the pinned ref costs one request instead of the full upstream load `--check` performs.
+async function pinStillResolves(pinned, upstreamRef, options) {
+  // Local --source-dir runs stay offline, and a run that resolved this exact ref already compared
+  // the pin against it through the same-ref drift check.
+  if (options.sourceDir || pinned.ref === upstreamRef) return true;
+  const resolve = options.resolveRemoteProvenance || resolveRemoteProvenance;
+  let resolved;
+  try {
+    resolved = await resolve(pinned.ref);
+  } catch (error) {
+    // A deleted ref is a verdict, not an outage: the pin cannot be reproduced, so repair it.
+    if (isMissingRefError(error)) return false;
+    throw new Error(
+      `Could not verify the pinned Wynntils ref ${pinned.ref} (${pinned.commit.slice(0, 12)}): ${error.message}`,
+      { cause: error },
+    );
+  }
+  return resolved.commit === pinned.commit && resolved.commitDate === pinned.commitDate;
+}
+
 export function resolveRequestedRef(options, existingSource) {
   if (options.ref || options.sourceDir || !options.check) return options.ref || '';
   const ref = String(parseExistingMetadata(existingSource)?.ref || '').trim();
@@ -510,7 +578,7 @@ export async function writeAtomicGroup(updates, operationOverrides = {}) {
   );
 }
 
-async function loadUpstream(options) {
+export async function loadUpstream(options) {
   const source = options.sourceDir
     ? await createLocalSource(options.sourceDir, options.ref)
     : await createRemoteSource(options.ref);
@@ -542,35 +610,99 @@ async function loadUpstream(options) {
 export async function synchronize(options) {
   const existingSource = await readFile(options.output, 'utf8').catch(() => '');
   const requestedRef = resolveRequestedRef(options, existingSource);
-  const upstream = await loadUpstream({ ...options, ref: requestedRef });
-  const functions = buildCatalog(upstream);
-  validateCandidate(functions, existingSource, options.allowLargeChange);
-  const generatedSource = renderCatalog(functions, upstream.metadata);
+  const load =
+    options.loadCatalog ||
+    (async () => {
+      const upstream = await loadUpstream({ ...options, ref: requestedRef });
+      const functions = buildCatalog(upstream);
+      validateCandidate(functions, existingSource, options.allowLargeChange);
+      return { metadata: upstream.metadata, functions };
+    });
+  const { metadata, functions } = await load();
+  const pinned = parsePinnedProvenance(existingSource);
+  const upstreamRef = String(metadata.ref || '').trim();
+  const upstreamCommit = String(metadata.commit || '')
+    .trim()
+    .toLowerCase();
+  const upstreamCommitDate = String(metadata.commitDate || '').trim();
+  const payloadChanged = !isPayloadEquivalent(functions, existingSource);
+  const provenanceChanged =
+    pinned.ref !== upstreamRef ||
+    pinned.commit !== upstreamCommit ||
+    pinned.commitDate !== upstreamCommitDate;
+  const summary = {
+    count: functions.length,
+    descriptions: functions.filter((entry) => entry.d).length,
+    ...metadata,
+    payloadChanged,
+    pinnedRef: pinned.ref,
+    provenanceChanged,
+  };
   const currentIndex = await readFile(options.index, 'utf8');
-  const updatedIndex = updateIndexVersion(
-    currentIndex,
-    upstream.metadata.ref,
-    upstream.metadata.commit,
-  );
+  // A snapshot is self-consistent only when the committed files are exactly what this payload
+  // renders to at the pinned provenance. Hand edits or merge leftovers fall through to the
+  // regular write path so `--check` cannot get stuck on a tree the sync refuses to repair.
+  const snapshotConsistent =
+    pinned.healthy &&
+    renderCatalog(functions, {
+      ref: pinned.ref,
+      commit: pinned.commit,
+      commitDate: pinned.commitDate,
+    }) === existingSource &&
+    updateIndexVersion(currentIndex, pinned.ref, pinned.commit) === currentIndex;
+  summary.snapshotConsistent = snapshotConsistent;
+  // A newer release always resolves to a different ref than the pin. When the *same* ref now
+  // resolves to a different commit or commit date (moved tag, hand-edited metadata) the pin is
+  // wrong even though the payload matches, so refresh it instead of leaving `--check` red.
+  const sameRefMoved =
+    pinned.ref === upstreamRef &&
+    (pinned.commit !== upstreamCommit || pinned.commitDate !== upstreamCommitDate);
+  const wouldSkip =
+    !options.check && !options.force && snapshotConsistent && !payloadChanged && !sameRefMoved;
+  // Skipping certifies that `--check` can re-render the snapshot from the pinned ref, so the pin
+  // itself is verified first; a pin that no longer resolves falls through to the repair path.
+  const pinVerified = wouldSkip ? await pinStillResolves(pinned, upstreamRef, options) : true;
+  summary.sameRefMoved = sameRefMoved;
+  summary.pinVerified = pinVerified;
+  if (wouldSkip && pinVerified) {
+    // Provenance-only drift: the committed payload is still current, so the snapshot
+    // keeps its pinned ref/commit and no generated file or cache version is touched.
+    return { changed: false, ...summary };
+  }
+  const generatedSource = renderCatalog(functions, metadata);
+  const updatedIndex = updateIndexVersion(currentIndex, metadata.ref, metadata.commit);
   const changed = generatedSource !== existingSource || updatedIndex !== currentIndex;
   if (options.check) {
-    if (changed) throw new Error('The Wynntils function snapshot is stale. Run the sync command.');
+    if (changed)
+      throw new Error(
+        sameRefMoved
+          ? `The Wynntils function snapshot is stale: ${pinned.ref} resolves to ${upstreamCommit.slice(0, 12)} (${upstreamCommitDate || 'unknown date'}), not the pinned ${pinned.commit.slice(0, 12)} (${pinned.commitDate || 'unknown date'}). Run the sync command to re-pin it.`
+          : 'The Wynntils function snapshot is stale. Run the sync command, or re-pin with --force if it reports no changes.',
+      );
   } else if (changed) {
     await writeAtomicGroup([
       { target: options.output, content: generatedSource },
       { target: options.index, content: updatedIndex },
     ]);
   }
-  return {
-    changed,
-    count: functions.length,
-    descriptions: functions.filter((entry) => entry.d).length,
-    ...upstream.metadata,
-  };
+  return { changed, ...summary };
 }
 
 async function main() {
   const result = await synchronize(parseCli(process.argv.slice(2)));
+  if (result.changed && !result.payloadChanged) {
+    process.stdout.write(
+      `Wynntils functions re-pinned: ${result.count} functions, upstream ${result.ref} @ ${result.commit.slice(0, 12)} has an identical function payload; snapshot re-pinned from ${result.pinnedRef || 'unknown'}.\n`,
+    );
+    return;
+  }
+  if (!result.changed && result.provenanceChanged) {
+    const pinned = result.pinnedRef || result.ref;
+    process.stdout.write(
+      `Wynntils functions current: ${result.count} functions, upstream ${result.ref} @ ${result.commit.slice(0, 12)} has no function changes; snapshot stays pinned to ${pinned}.\n`,
+    );
+    return;
+  }
   const state = result.changed ? 'updated' : 'current';
   process.stdout.write(
     `Wynntils functions ${state}: ${result.count} functions, ${result.descriptions} official zh_cn descriptions, ${result.ref} @ ${result.commit.slice(0, 12)}\n`,

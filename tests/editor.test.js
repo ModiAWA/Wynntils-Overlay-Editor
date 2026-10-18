@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const { createHash } = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -1918,6 +1919,10 @@ test('static entry point is offline-safe and loads translation data in order', a
     path.join(ROOT, '.github', 'workflows', 'sync-wynntils-resources.yml'),
     'utf8',
   );
+  const functionWorkflow = fs.readFileSync(
+    path.join(ROOT, '.github', 'workflows', 'sync-wynntils-functions.yml'),
+    'utf8',
+  );
   const dependabot = fs.readFileSync(path.join(ROOT, '.github', 'dependabot.yml'), 'utf8');
   const functionsSource = fs.readFileSync(path.join(ROOT, 'js/functions.generated.js'), 'utf8');
   const CacheVersions = await import(
@@ -2041,6 +2046,18 @@ test('static entry point is offline-safe and loads translation data in order', a
   assert.doesNotMatch(ci, /pnpm (?:check|test):/);
   assert.match(resourceWorkflow, /node scripts\/sync-resources\.mjs/);
   assert.match(resourceWorkflow, /GITHUB_TOKEN/);
+  // The strict snapshot check must run after the sync, otherwise a repairable pin aborts the job.
+  const generateStep = functionWorkflow.indexOf('run: node scripts/sync-functions.mjs\n');
+  assert.ok(generateStep > 0, 'the function workflow must still generate the snapshot');
+  assert.ok(
+    functionWorkflow.indexOf('node scripts/sync-functions.mjs --check') > generateStep,
+    'the strict function snapshot check must run after the sync step',
+  );
+  assert.match(
+    functionWorkflow,
+    /if: steps\.changes\.outputs\.changed == 'false'\n(?:.*\n)*?\s+run: node scripts\/sync-functions\.mjs --check/,
+  );
+  assert.match(functionWorkflow, /WYNNTILS_FORCE:/);
   assert.match(
     resourceSyncSource,
     /CONTENTS_URL\s*=\s*`https:\/\/api\.github\.com\/repos\/\$\{REPOSITORY\}\/contents`/,
@@ -2326,4 +2343,594 @@ test('legacy DOM glyph renderer and fake font asset are removed', () => {
   const css = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
   assert.doesNotMatch(css, /\.wynn-(?:banner-)?glyph/);
   assert.equal(fs.existsSync(path.join(ROOT, 'assets/fonts/Minecraft.woff2')), false);
+});
+
+test('function payload comparison ignores provenance-only snapshot rewrites', async () => {
+  const Sync = await import(pathToFileURL(path.join(ROOT, 'scripts/sync-functions.mjs')).href);
+  const source = fs.readFileSync(path.join(ROOT, 'js/functions.generated.js'), 'utf8');
+  const payload = Sync.parseFunctionPayload(source);
+  assert.equal(Array.isArray(payload), true);
+  assert.equal(payload.length, Meta.count);
+  assert.equal(Sync.isPayloadEquivalent(payload, source), true);
+
+  // Re-tagging the same catalog (new ref, commit, and commit date) keeps the payload equal.
+  const repinned = source.replace(/at [^(]+ \(/, 'at v0.0.0 (').replace(
+    /window\.WYNNTILS_FUNCTION_META=[^\r\n]*/,
+    `window.WYNNTILS_FUNCTION_META=${JSON.stringify({
+      ...Meta,
+      ref: 'v0.0.0',
+      commit: 'b'.repeat(40),
+      commitDate: '2000-01-01T00:00:00Z',
+    })};`,
+  );
+  assert.equal(Sync.isPayloadEquivalent(payload, repinned), true);
+
+  const changedReturnType = payload.map((entry, index) =>
+    index === 0 ? { ...entry, r: `${entry.r}Changed` } : entry,
+  );
+  assert.equal(Sync.isPayloadEquivalent(changedReturnType, source), false);
+  const changedDescription = payload.map((entry, index) =>
+    index === 0 ? { ...entry, d: `${entry.d || ''} changed` } : entry,
+  );
+  assert.equal(Sync.isPayloadEquivalent(changedDescription, source), false);
+  const addedFunction = [...payload, { n: 'zzz_probe', a: [], r: 'String', p: [] }];
+  assert.equal(Sync.isPayloadEquivalent(addedFunction, source), false);
+
+  for (const invalid of [
+    '',
+    'not javascript',
+    'window.WYNNTILS_FUNCTIONS={"n":"abs"};',
+    'window.WYNNTILS_FUNCTIONS=[{"n":"abs"}',
+    'window.WYNNTILS_FUNCTIONS=[{"n":}];',
+  ]) {
+    assert.equal(Sync.parseFunctionPayload(invalid), null);
+    assert.equal(Sync.isPayloadEquivalent(payload, invalid), false);
+  }
+});
+
+test('resource substantive-change detection ignores provenance-only rewrites', async () => {
+  const Sync = await import(pathToFileURL(path.join(ROOT, 'scripts/sync-resources.mjs')).href);
+  const source = fs.readFileSync(path.join(ROOT, 'js/resources.generated.js'), 'utf8');
+  const notice = fs.readFileSync(path.join(ROOT, 'THIRD_PARTY_NOTICES.md'), 'utf8');
+  const pinned = Sync.currentCommit(source);
+  const repinnedSource = source.replace(pinned, 'c'.repeat(40));
+  const repinnedNotice = notice.replace(pinned, 'c'.repeat(40));
+
+  assert.equal(Sync.stripProvenance(repinnedSource), Sync.stripProvenance(source));
+  assert.equal(Sync.stripProvenance(repinnedNotice), Sync.stripProvenance(notice));
+  assert.equal(
+    Sync.hasSubstantiveChange({
+      previousSource: source,
+      nextSource: repinnedSource,
+      previousNotice: notice,
+      nextNotice: repinnedNotice,
+    }),
+    false,
+  );
+
+  const assetHash = /hash: '([0-9a-f]{16})'/.exec(source)[1];
+  assert.equal(
+    Sync.hasSubstantiveChange({
+      previousSource: source,
+      nextSource: source.replace(assetHash, 'deadbeefdeadbeef'),
+      previousNotice: notice,
+      nextNotice: notice,
+    }),
+    true,
+  );
+  assert.equal(
+    Sync.hasSubstantiveChange({
+      previousSource: source,
+      nextSource: source.replace(/width: \d+/, 'width: 999'),
+      previousNotice: notice,
+      nextNotice: notice,
+    }),
+    true,
+  );
+  assert.equal(
+    Sync.hasSubstantiveChange({
+      previousSource: source,
+      nextSource: source,
+      previousNotice: notice,
+      nextNotice: notice.replace('Wynntils contributors', 'Wynntils contributors (changed)'),
+    }),
+    true,
+  );
+  assert.equal(
+    Sync.hasSubstantiveChange({
+      previousSource: source,
+      nextSource: source,
+      previousNotice: notice,
+      nextNotice: notice,
+      assetChanges: 1,
+    }),
+    true,
+  );
+  assert.equal(
+    Sync.hasSubstantiveChange({
+      previousSource: '',
+      nextSource: source,
+      previousNotice: '',
+      nextNotice: notice,
+    }),
+    true,
+  );
+
+  // Provenance stripping only covers the pinned commit fields, so an unrelated 40-hex value
+  // keeps counting as a substantive change.
+  const withExtraHash = source.replace(
+    "commit: '",
+    `archive: '${'d'.repeat(40)}',\n      commit: '`,
+  );
+  assert.equal(
+    Sync.hasSubstantiveChange({
+      previousSource: withExtraHash,
+      nextSource: withExtraHash.replace('d'.repeat(40), 'e'.repeat(40)),
+      previousNotice: notice,
+      nextNotice: notice,
+    }),
+    true,
+  );
+});
+
+test('function sync only rewrites the snapshot when the upstream payload changes', async () => {
+  const Sync = await import(pathToFileURL(path.join(ROOT, 'scripts/sync-functions.mjs')).href);
+  const temporaryDirectory = await fs.promises.mkdtemp(
+    path.join(os.tmpdir(), 'wynntils-editor-function-gate-'),
+  );
+  const output = path.join(temporaryDirectory, 'functions.generated.js');
+  const index = path.join(temporaryDirectory, 'index.html');
+  await fs.promises.writeFile(index, '<script src="js/functions.generated.js"></script>\n');
+  const payload = Sync.parseFunctionPayload(
+    fs.readFileSync(path.join(ROOT, 'js/functions.generated.js'), 'utf8'),
+  );
+  const provenanceA = {
+    ref: 'v4.2.8',
+    commit: 'a'.repeat(40),
+    commitDate: '2026-08-15T19:38:04Z',
+  };
+  const provenanceB = {
+    ref: 'v9.9.9',
+    commit: 'b'.repeat(40),
+    commitDate: '2026-09-15T19:38:04Z',
+  };
+  const run = (metadata, functions, overrides = {}) =>
+    Sync.synchronize({
+      output,
+      index,
+      ref: '',
+      sourceDir: '',
+      check: false,
+      force: false,
+      loadCatalog: async () => ({ metadata, functions }),
+      // The pinned ref stays honest: it resolves to whatever the committed snapshot records.
+      resolveRemoteProvenance: async () => {
+        const source = await fs.promises.readFile(output, 'utf8');
+        const meta = JSON.parse(/WYNNTILS_FUNCTION_META=(\{[^\r\n;]+\});/.exec(source)[1]);
+        return { commit: meta.commit, commitDate: meta.commitDate };
+      },
+      ...overrides,
+    });
+
+  try {
+    const first = await run(provenanceA, payload);
+    assert.equal(first.changed, true);
+    // There is no committed snapshot yet, so everything counts as a payload change.
+    assert.equal(first.payloadChanged, true);
+    assert.equal(first.provenanceChanged, true);
+    const firstSource = await fs.promises.readFile(output, 'utf8');
+    const firstIndex = await fs.promises.readFile(index, 'utf8');
+    assert.match(firstSource, /at v4\.2\.8 \(a{40}\)/);
+    assert.match(firstIndex, /\?v=4\.2\.8/);
+    assert.equal(Sync.parseFunctionPayload(firstSource).length, payload.length);
+
+    // A new upstream release with a byte-identical catalog must not touch either file.
+    const second = await run(provenanceB, payload);
+    assert.equal(second.changed, false);
+    assert.equal(second.payloadChanged, false);
+    assert.equal(second.provenanceChanged, true);
+    assert.equal(second.pinnedRef, 'v4.2.8');
+    assert.equal(await fs.promises.readFile(output, 'utf8'), firstSource);
+    assert.equal(await fs.promises.readFile(index, 'utf8'), firstIndex);
+
+    // The explicit escape hatch still re-pins provenance when the catalog is unchanged.
+    const forced = await run(provenanceB, payload, { force: true });
+    assert.equal(forced.changed, true);
+    assert.match(await fs.promises.readFile(output, 'utf8'), /at v9\.9\.9 \(b{40}\)/);
+
+    const extended = [...payload, { n: 'zzz_gate_probe', a: [], r: 'String', p: [] }];
+    const third = await run(provenanceB, extended);
+    assert.equal(third.changed, true);
+    assert.equal(third.payloadChanged, true);
+    const thirdSource = await fs.promises.readFile(output, 'utf8');
+    assert.notEqual(thirdSource, firstSource);
+    assert.match(thirdSource, /at v9\.9\.9 \(b{40}\)/);
+    assert.equal(Sync.parseFunctionPayload(thirdSource).length, payload.length + 1);
+    assert.match(await fs.promises.readFile(index, 'utf8'), /\?v=9\.9\.9/);
+  } finally {
+    await fs.promises.rm(temporaryDirectory, { recursive: true, force: true });
+  }
+});
+
+test('resource sync only rewrites the snapshot when the upstream payload changes', async () => {
+  const Sync = await import(pathToFileURL(path.join(ROOT, 'scripts/sync-resources.mjs')).href);
+  const temporaryDirectory = await fs.promises.mkdtemp(
+    path.join(os.tmpdir(), 'wynntils-editor-resource-gate-'),
+  );
+  const output = path.join(temporaryDirectory, 'resources.generated.js');
+  const notice = path.join(temporaryDirectory, 'THIRD_PARTY_NOTICES.md');
+  const assets = path.join(temporaryDirectory, 'assets');
+  await fs.promises.writeFile(
+    notice,
+    `## Wynntils 字体资源\n\n- 上游 commit：\`${'0'.repeat(40)}\`\n`,
+  );
+  const five = Sync.parseManifest(
+    JSON.stringify({
+      providers: [
+        {
+          type: 'bitmap',
+          file: 'wynntils:font/chat/five.png',
+          ascent: 6,
+          height: 7,
+          chars: ['ABCDEFGHIJKLMNOP', 'QRSTUVWXYZ?[]\\%&', '0123456789!()<=>'],
+        },
+      ],
+    }),
+    'five',
+  );
+  const banners = Sync.parseManifest(
+    JSON.stringify({
+      providers: [
+        {
+          type: 'bitmap',
+          file: 'wynntils:font/chat/ribbon_start.png',
+          ascent: 7,
+          height: 8,
+          chars: ['\uE008'],
+        },
+      ],
+    }),
+    'banners',
+  );
+  const hash16 = (buffer) => createHash('sha256').update(buffer).digest('hex').slice(0, 16);
+  const commitA = 'a'.repeat(40);
+  const commitB = 'b'.repeat(40);
+  const fiveA = Buffer.from('five-png-a');
+  const fiveB = Buffer.from('five-png-b');
+  const ribbon = Buffer.from('ribbon-start-png');
+  const remoteFor = (commit, fiveBytes, ribbonBytes) => ({
+    data: Sync.buildResourceData(commit, [five, banners], {
+      five: { width: 3, height: 14, hash: hash16(fiveBytes) },
+      ribbon_start: { width: 7, height: 8, hash: hash16(ribbonBytes) },
+    }),
+    assets: { five: fiveBytes, ribbon_start: ribbonBytes },
+  });
+  const run = (commit, ref, remote, overrides = {}) =>
+    Sync.synchronize({
+      output,
+      notice,
+      assets,
+      ref: '',
+      check: false,
+      force: false,
+      resolveCommit: async () => ({ ref, commit }),
+      loadRemote: async () => remote,
+      ...overrides,
+    });
+  const fivePath = path.join(assets, 'five.png');
+
+  try {
+    const first = await run(commitA, 'v4.2.8', remoteFor(commitA, fiveA, ribbon));
+    assert.equal(first.changed, true);
+    assert.equal(first.pinnedCommit, null);
+    assert.equal(first.provenanceChanged, true);
+    const firstSource = await fs.promises.readFile(output, 'utf8');
+    const firstNotice = await fs.promises.readFile(notice, 'utf8');
+    const firstFive = await fs.promises.readFile(fivePath);
+    assert.equal(Sync.currentCommit(firstSource), commitA);
+    assert.deepEqual(firstFive, fiveA);
+
+    // A new upstream release with identical manifests and byte-identical PNGs must not rewrite anything.
+    const second = await run(commitB, 'v9.9.9', remoteFor(commitB, fiveA, ribbon));
+    assert.equal(second.changed, false);
+    assert.equal(second.substantive, false);
+    assert.equal(second.provenanceChanged, true);
+    assert.equal(second.pinnedCommit, commitA);
+    assert.equal(await fs.promises.readFile(output, 'utf8'), firstSource);
+    assert.equal(await fs.promises.readFile(notice, 'utf8'), firstNotice);
+    assert.deepEqual(await fs.promises.readFile(fivePath), firstFive);
+
+    // The explicit escape hatch still re-pins provenance when the assets are unchanged.
+    const forced = await run(commitB, 'v9.9.9', remoteFor(commitB, fiveA, ribbon), { force: true });
+    assert.equal(forced.changed, true);
+    assert.equal(Sync.currentCommit(await fs.promises.readFile(output, 'utf8')), commitB);
+
+    const third = await run(commitB, 'v9.9.9', remoteFor(commitB, fiveB, ribbon));
+    assert.equal(third.changed, true);
+    assert.equal(third.substantive, true);
+    assert.equal(Sync.currentCommit(await fs.promises.readFile(output, 'utf8')), commitB);
+    assert.deepEqual(await fs.promises.readFile(fivePath), fiveB);
+    assert.match(await fs.promises.readFile(notice, 'utf8'), new RegExp(commitB));
+  } finally {
+    await fs.promises.rm(temporaryDirectory, { recursive: true, force: true });
+  }
+});
+
+test('function sync repairs a self-inconsistent snapshot instead of skipping it', async () => {
+  const Sync = await import(pathToFileURL(path.join(ROOT, 'scripts/sync-functions.mjs')).href);
+  const temporaryDirectory = await fs.promises.mkdtemp(
+    path.join(os.tmpdir(), 'wynntils-editor-function-repair-'),
+  );
+  const output = path.join(temporaryDirectory, 'functions.generated.js');
+  const index = path.join(temporaryDirectory, 'index.html');
+  const payload = Sync.parseFunctionPayload(
+    fs.readFileSync(path.join(ROOT, 'js/functions.generated.js'), 'utf8'),
+  );
+  const provenance = {
+    ref: 'v4.2.8',
+    commit: 'a'.repeat(40),
+    commitDate: '2026-08-15T19:38:04Z',
+  };
+  const canonical = Sync.renderCatalog(payload, provenance);
+  const run = (metadata = provenance) =>
+    Sync.synchronize({
+      output,
+      index,
+      ref: '',
+      sourceDir: '',
+      check: false,
+      force: false,
+      loadCatalog: async () => ({ metadata, functions: payload }),
+    });
+
+  try {
+    await fs.promises.writeFile(
+      index,
+      '<script src="js/functions.generated.js?v=4.2.8"></script>\n',
+    );
+    // A hand-edited header would otherwise satisfy the provenance-only gate forever while
+    // the snapshot check keeps failing.
+    await fs.promises.writeFile(output, canonical.replace('at v4.2.8 (', 'at v9.9.9 ('));
+    const repairedHeader = await run();
+    assert.equal(repairedHeader.snapshotConsistent, false);
+    assert.equal(repairedHeader.changed, true);
+    assert.equal(await fs.promises.readFile(output, 'utf8'), canonical);
+
+    // A drifted index version is repaired the same way.
+    await fs.promises.writeFile(
+      index,
+      '<script src="js/functions.generated.js?v=9.9.9"></script>\n',
+    );
+    const repairedIndex = await run();
+    assert.equal(repairedIndex.snapshotConsistent, false);
+    assert.equal(repairedIndex.changed, true);
+    assert.match(await fs.promises.readFile(index, 'utf8'), /\?v=4\.2\.8/);
+
+    // Once consistent again, the provenance-only gate leaves the tree untouched.
+    const stable = await run();
+    assert.equal(stable.snapshotConsistent, true);
+    assert.equal(stable.changed, false);
+
+    // The same ref resolving to different provenance (moved tag, hand-edited commit date) must
+    // refresh the pin instead of skipping, or the snapshot check would stay red forever.
+    const moved = { ...provenance, commitDate: '2026-10-09T20:12:46Z' };
+    const refreshed = await run(moved);
+    assert.equal(refreshed.snapshotConsistent, true);
+    assert.equal(refreshed.payloadChanged, false);
+    assert.equal(refreshed.changed, true);
+    assert.equal(await fs.promises.readFile(output, 'utf8'), Sync.renderCatalog(payload, moved));
+
+    const settled = await run(moved);
+    assert.equal(settled.changed, false);
+  } finally {
+    await fs.promises.rm(temporaryDirectory, { recursive: true, force: true });
+  }
+});
+
+test('resource sync repairs a self-inconsistent notice instead of skipping it', async () => {
+  const Sync = await import(pathToFileURL(path.join(ROOT, 'scripts/sync-resources.mjs')).href);
+  const temporaryDirectory = await fs.promises.mkdtemp(
+    path.join(os.tmpdir(), 'wynntils-editor-resource-repair-'),
+  );
+  const output = path.join(temporaryDirectory, 'resources.generated.js');
+  const notice = path.join(temporaryDirectory, 'THIRD_PARTY_NOTICES.md');
+  const assets = path.join(temporaryDirectory, 'assets');
+  await fs.promises.writeFile(
+    notice,
+    `## Wynntils 字体资源\n\n- 上游 commit：\`${'0'.repeat(40)}\`\n`,
+  );
+  const five = Sync.parseManifest(
+    JSON.stringify({
+      providers: [
+        {
+          type: 'bitmap',
+          file: 'wynntils:font/chat/five.png',
+          ascent: 6,
+          height: 7,
+          chars: ['ABCDEFGHIJKLMNOP', 'QRSTUVWXYZ?[]\\%&', '0123456789!()<=>'],
+        },
+      ],
+    }),
+    'five',
+  );
+  const banners = Sync.parseManifest(
+    JSON.stringify({
+      providers: [
+        {
+          type: 'bitmap',
+          file: 'wynntils:font/chat/ribbon_start.png',
+          ascent: 7,
+          height: 8,
+          chars: ['\uE008'],
+        },
+      ],
+    }),
+    'banners',
+  );
+  const commitA = 'a'.repeat(40);
+  const commitB = 'b'.repeat(40);
+  const fiveBytes = Buffer.from('five-png');
+  const remoteFor = (commit) => ({
+    data: Sync.buildResourceData(commit, [five, banners], {
+      five: { width: 3, height: 14 },
+      ribbon_start: { width: 7, height: 8 },
+    }),
+    assets: { five: fiveBytes },
+  });
+  const run = (commit, ref) =>
+    Sync.synchronize({
+      output,
+      notice,
+      assets,
+      ref: '',
+      check: false,
+      force: false,
+      resolveCommit: async () => ({ ref, commit }),
+      loadRemote: async () => remoteFor(commit),
+    });
+
+  try {
+    await run(commitA, 'v4.2.8');
+    // Hand-edit the notice so it pins a different commit than the generated manifest.
+    const handEdited = (await fs.promises.readFile(notice, 'utf8')).replace(
+      commitA,
+      'c'.repeat(40),
+    );
+    await fs.promises.writeFile(notice, handEdited);
+    assert.equal(Sync.noticeCommit(handEdited), 'c'.repeat(40));
+
+    const repaired = await run(commitB, 'v9.9.9');
+    assert.equal(repaired.snapshotConsistent, false);
+    assert.equal(repaired.substantive, false);
+    assert.equal(repaired.changed, true);
+    assert.equal(Sync.noticeCommit(await fs.promises.readFile(notice, 'utf8')), commitB);
+
+    const stable = await run(commitB, 'v9.9.9');
+    assert.equal(stable.snapshotConsistent, true);
+    assert.equal(stable.changed, false);
+  } finally {
+    await fs.promises.rm(temporaryDirectory, { recursive: true, force: true });
+  }
+});
+
+test('function sync re-verifies the pinned ref before certifying a no-op', async () => {
+  const Sync = await import(pathToFileURL(path.join(ROOT, 'scripts/sync-functions.mjs')).href);
+  const temporaryDirectory = await fs.promises.mkdtemp(
+    path.join(os.tmpdir(), 'wynntils-editor-function-pin-'),
+  );
+  const output = path.join(temporaryDirectory, 'functions.generated.js');
+  const index = path.join(temporaryDirectory, 'index.html');
+  const payload = Sync.parseFunctionPayload(
+    fs.readFileSync(path.join(ROOT, 'js/functions.generated.js'), 'utf8'),
+  );
+  const pinned = { ref: 'v4.2.8', commit: 'a'.repeat(40), commitDate: '2026-08-15T19:38:04Z' };
+  const latest = { ref: 'v9.9.9', commit: 'b'.repeat(40), commitDate: '2026-09-15T19:38:04Z' };
+  const canonical = Sync.renderCatalog(payload, pinned);
+  const requests = [];
+  const run = (resolveRemoteProvenance, overrides = {}) =>
+    Sync.synchronize({
+      output,
+      index,
+      ref: '',
+      sourceDir: '',
+      check: false,
+      force: false,
+      loadCatalog: async () => ({ metadata: latest, functions: payload }),
+      resolveRemoteProvenance,
+      ...overrides,
+    });
+  const seed = async () => {
+    await fs.promises.writeFile(output, canonical);
+    await fs.promises.writeFile(
+      index,
+      '<script src="js/functions.generated.js?v=4.2.8"></script>\n',
+    );
+  };
+
+  try {
+    // The pin still resolves to the commit and date it records: skip, one verification request.
+    await seed();
+    const honest = await run(async (ref) => {
+      requests.push(ref);
+      return { commit: pinned.commit, commitDate: pinned.commitDate };
+    });
+    assert.equal(honest.payloadChanged, false);
+    assert.equal(honest.snapshotConsistent, true);
+    assert.equal(honest.sameRefMoved, false);
+    assert.equal(honest.pinVerified, true);
+    assert.equal(honest.changed, false);
+    assert.deepEqual(requests, ['v4.2.8']);
+    assert.equal(await fs.promises.readFile(output, 'utf8'), canonical);
+
+    // A pin that no longer resolves to its recorded commit must be re-pinned, not skipped.
+    requests.length = 0;
+    await seed();
+    const stale = await run(async (ref) => {
+      requests.push(ref);
+      return { commit: 'c'.repeat(40), commitDate: '2026-01-01T00:00:00Z' };
+    });
+    assert.equal(stale.snapshotConsistent, true);
+    assert.equal(stale.pinVerified, false);
+    assert.equal(stale.changed, true);
+    assert.deepEqual(requests, ['v4.2.8']);
+    assert.equal(await fs.promises.readFile(output, 'utf8'), Sync.renderCatalog(payload, latest));
+    assert.match(await fs.promises.readFile(index, 'utf8'), /\?v=9\.9\.9/);
+
+    // A deleted pin is a verdict, not an outage.
+    requests.length = 0;
+    await seed();
+    const deleted = await run(async (ref) => {
+      requests.push(ref);
+      throw Object.assign(new Error(`HTTP 404 from commits/${ref}`), { status: 404 });
+    });
+    assert.equal(deleted.pinVerified, false);
+    assert.equal(deleted.changed, true);
+    assert.equal(await fs.promises.readFile(output, 'utf8'), Sync.renderCatalog(payload, latest));
+
+    // An outage must not be mistaken for a stale pin: fail closed, write nothing.
+    requests.length = 0;
+    await seed();
+    await assert.rejects(
+      run(async () => {
+        throw new Error('socket hang up');
+      }),
+      /Could not verify the pinned Wynntils ref v4\.2\.8 \(a{12}\)/,
+    );
+    assert.equal(await fs.promises.readFile(output, 'utf8'), canonical);
+
+    // Resolving the pinned ref itself needs no extra request: the same-ref drift check covers it.
+    requests.length = 0;
+    await seed();
+    const sameRef = await run(
+      async (ref) => {
+        requests.push(ref);
+        return { commit: pinned.commit, commitDate: pinned.commitDate };
+      },
+      { loadCatalog: async () => ({ metadata: pinned, functions: payload }) },
+    );
+    assert.equal(sameRef.changed, false);
+    assert.deepEqual(requests, []);
+
+    // A stale pin found by `--check` names the offending ref instead of advising a no-op sync.
+    requests.length = 0;
+    await seed();
+    await assert.rejects(
+      run(
+        async () => {
+          throw new Error('unused');
+        },
+        {
+          check: true,
+          loadCatalog: async () => ({
+            metadata: { ...pinned, commit: 'c'.repeat(40) },
+            functions: payload,
+          }),
+        },
+      ),
+      /v4\.2\.8 resolves to c{12} \([^)]*\), not the pinned a{12} \([^)]*\)\. Run the sync command to re-pin it\./,
+    );
+    assert.deepEqual(requests, []);
+  } finally {
+    await fs.promises.rm(temporaryDirectory, { recursive: true, force: true });
+  }
 });
