@@ -2058,6 +2058,20 @@ test('static entry point is offline-safe and loads translation data in order', a
     /if: steps\.changes\.outputs\.changed == 'false'\n(?:.*\n)*?\s+run: node scripts\/sync-functions\.mjs --check/,
   );
   assert.match(functionWorkflow, /WYNNTILS_FORCE:/);
+  // tests/editor.test.js imports Prettier through the resource sync, so any workflow that runs the
+  // editor suite needs devDependencies installed first.
+  for (const [label, workflow] of [
+    ['function', functionWorkflow],
+    ['resource', resourceWorkflow],
+  ]) {
+    const installStep = workflow.indexOf('run: pnpm install --frozen-lockfile');
+    const testStep = workflow.indexOf('node --test tests/editor.test.js');
+    assert.ok(testStep > 0, `the ${label} workflow must still verify the editor suite`);
+    assert.ok(
+      installStep > 0 && installStep < testStep,
+      `the ${label} workflow must install dependencies before running the editor suite`,
+    );
+  }
   assert.match(
     resourceSyncSource,
     /CONTENTS_URL\s*=\s*`https:\/\/api\.github\.com\/repos\/\$\{REPOSITORY\}\/contents`/,

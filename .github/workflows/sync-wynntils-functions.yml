@@ -40,10 +40,21 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      # tests/editor.test.js also exercises the resource sync, which imports Prettier, so the
+      # suite needs devDependencies just like ci.yml. Without this the verify step fails with
+      # ERR_MODULE_NOT_FOUND before the snapshot is ever generated.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Verify the editor and the working tree
         run: |
